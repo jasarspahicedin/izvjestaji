@@ -4,7 +4,7 @@ import Login from './components/Login'
 import AutocompleteInput from './components/AutocompleteInput'
 import { TEXT_FIELDS, TEXTAREA_FIELDS, emptyVisit } from './lib/fields'
 import { todayYMD, formatDisplay, getWeekDates, parseYMD, toYMD } from './lib/dateUtils'
-import { generateDailyReport, generateWeeklyReport } from './lib/reportGenerator'
+import { createDailyReportFile, generateDailyReport, generateWeeklyReport } from './lib/reportGenerator'
 import { guessKanton } from './lib/kantoni'
 import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, Sheet, Loader2, Pencil } from 'lucide-react'
 import VoiceTextarea from './components/VoiceTextarea'
@@ -217,6 +217,39 @@ function ReportApp({ session }) {
     try {
       const nonEmpty = visits.filter(hasContent)
       await generateDailyReport(date, nonEmpty.length ? nonEmpty : visits, fullName, dailyNote)
+    } finally {
+      setBusyReport(false)
+    }
+  }
+
+  async function handleSendDailyReport() {
+    setBusyReport(true)
+    try {
+      const nonEmpty = visits.filter(hasContent)
+      const file = await createDailyReportFile(date, nonEmpty.length ? nonEmpty : visits, fullName, dailyNote)
+
+      const shareData = {
+        title: file.name,
+        text: `Dnevni izvještaj za ${formatDisplay(date)}`,
+        files: [file],
+      }
+
+      if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare?.(shareData)) {
+        await navigator.share(shareData)
+        return
+      }
+
+      const url = URL.createObjectURL(file)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = file.name
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+
+      const mailto = `mailto:?subject=${encodeURIComponent(`Dnevni izvještaj ${formatDisplay(date)}`)}&body=${encodeURIComponent('Priloženi izvještaj je preuzet. Upiši primatelje u mail aplikaciji.')}`
+      window.location.href = mailto
     } finally {
       setBusyReport(false)
     }
@@ -450,6 +483,13 @@ function ReportApp({ session }) {
               className="flex-1 flex items-center justify-center gap-2 rounded-md bg-accent text-white py-2.5 text-sm font-medium hover:bg-accent/90 disabled:opacity-50"
             >
               <FileText size={16} /> Dnevni izvještaj
+            </button>
+            <button
+              onClick={handleSendDailyReport}
+              disabled={busyReport}
+              className="flex-1 flex items-center justify-center gap-2 rounded-md border border-accent/40 text-accent py-2.5 text-sm font-medium hover:bg-accent/5 disabled:opacity-50"
+            >
+              <FileText size={16} /> Pošalji izvještaj
             </button>
             <button
               onClick={handleWeeklyReport}

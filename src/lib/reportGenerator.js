@@ -98,7 +98,7 @@ function uniqueMjesto(visits) {
   return [...set].join(', ')
 }
 
-export async function generateDailyReport(dateYMD, visits, fullName, generalniKomentar) {
+export async function createDailyReportFile(dateYMD, visits, fullName, generalniKomentar) {
   const doc = new Document({
     sections: [
       {
@@ -115,7 +115,13 @@ export async function generateDailyReport(dateYMD, visits, fullName, generalniKo
     ],
   })
   const blob = await Packer.toBlob(doc)
-  saveAs(blob, `dnevni-izvjestaj-${dateYMD}.docx`)
+  const fileName = `dnevni-izvjestaj-${dateYMD}.docx`
+  return new File([blob], fileName, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+}
+
+export async function generateDailyReport(dateYMD, visits, fullName, generalniKomentar) {
+  const file = await createDailyReportFile(dateYMD, visits, fullName, generalniKomentar)
+  saveAs(file, file.name)
 }
 
 // Sedmicni izvjestaj je Excel tabela (jedan red po posjeti), po uzoru na postojeci
