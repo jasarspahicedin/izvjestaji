@@ -7,6 +7,7 @@ import { todayYMD, formatDisplay, getWeekDates } from './lib/dateUtils'
 import { generateDailyReport, generateWeeklyReport } from './lib/reportGenerator'
 import { guessKanton } from './lib/kantoni'
 import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, Sheet, Loader2, Pencil } from 'lucide-react'
+import VoiceTextarea from './components/VoiceTextarea'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -371,14 +372,11 @@ function ReportApp({ session }) {
                 <div className="space-y-4">
                   {TEXTAREA_FIELDS.map((f) => (
                     <div key={f.key}>
-                      <label className="block text-xs font-mono uppercase tracking-wide text-ink/60 mb-1">
-                        {f.label}
-                      </label>
-                      <textarea
-                        rows={2}
+                      <VoiceTextarea
+                        label={f.label}
                         value={current[f.key] || ''}
-                        onChange={(e) => updateField(f.key, e.target.value)}
-                        className="w-full rounded-md border border-ink/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent"
+                        onChange={(val) => updateField(f.key, val)}
+                        rows={2}
                       />
                     </div>
                   ))}
@@ -388,17 +386,12 @@ function ReportApp({ session }) {
 
             {/* Generalni komentar - JEDAN, za citav dan, ne po posjeti */}
             <div className="bg-white rounded-lg border border-ink/10 p-5 mt-4">
-              <label className="block text-xs font-mono uppercase tracking-wide text-ink/60 mb-1">
-                Generalni komentar (za cijeli dan)
-              </label>
-              <p className="text-[11px] text-ink/40 mb-2">
-                Zajednički komentar za sve posjete danas. Svaki novi red postaje posebna tačka u izvještaju.
-              </p>
-              <textarea
-                rows={4}
+              <VoiceTextarea
+                label="Generalni komentar (za cijeli dan)"
+                description="Zajednički komentar za sve posjete danas. Svaki novi red postaje posebna tačka u izvještaju."
                 value={dailyNote}
-                onChange={(e) => updateDailyNote(e.target.value)}
-                className="w-full rounded-md border border-ink/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent"
+                onChange={updateDailyNote}
+                rows={4}
               />
             </div>
           </>
