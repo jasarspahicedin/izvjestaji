@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient'
 import Login from './components/Login'
 import AutocompleteInput from './components/AutocompleteInput'
 import { TEXT_FIELDS, TEXTAREA_FIELDS, emptyVisit } from './lib/fields'
-import { todayYMD, formatDisplay, getWeekDates } from './lib/dateUtils'
+import { todayYMD, formatDisplay, getWeekDates, parseYMD, toYMD } from './lib/dateUtils'
 import { generateDailyReport, generateWeeklyReport } from './lib/reportGenerator'
 import { guessKanton } from './lib/kantoni'
 import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, Sheet, Loader2, Pencil } from 'lucide-react'
@@ -58,6 +58,8 @@ function ReportApp({ session }) {
   const [suggestions, setSuggestions] = useState({})
   const [busyReport, setBusyReport] = useState(false)
   const [dailyNote, setDailyNote] = useState('')
+  const [reportStartDate, setReportStartDate] = useState(() => getWeekDates(todayYMD())[0])
+  const [reportEndDate, setReportEndDate] = useState(() => getWeekDates(todayYMD())[6])
   const saveTimer = useRef(null)
   const noteTimer = useRef(null)
 
@@ -220,12 +222,32 @@ function ReportApp({ session }) {
     }
   }
 
+  function getDatesInRange(startYmd, endYmd) {
+    if (!startYmd || !endYmd) return []
+    const start = parseYMD(startYmd)
+    const end = parseYMD(endYmd)
+    if (end < start) return []
+
+    const dates = []
+    const cursor = new Date(start)
+    while (cursor <= end) {
+      dates.push(toYMD(cursor))
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return dates
+  }
+
   async function handleWeeklyReport() {
     setBusyReport(true)
     try {
-      const weekDates = getWeekDates(date)
+      const rangeDates = getDatesInRange(reportStartDate, reportEndDate)
+      if (rangeDates.length === 0) {
+        alert('Odaberite važeći raspon datuma.')
+        return
+      }
+
       const groups = []
-      for (const d of weekDates) {
+      for (const d of rangeDates) {
         const { data } = await supabase
           .from('visits')
           .select('*')
@@ -246,10 +268,10 @@ function ReportApp({ session }) {
         }
       }
       if (groups.length === 0) {
-        alert('Nema unesenih posjeta u ovoj sedmici.')
+        alert('Nema unesenih posjeta u odabranom rasponu datuma.')
         return
       }
-      const label = `${formatDisplay(weekDates[0])} - ${formatDisplay(weekDates[6])}`
+      const label = `${formatDisplay(reportStartDate)} - ${formatDisplay(reportEndDate)}`
       await generateWeeklyReport(label, fullName, groups)
     } finally {
       setBusyReport(false)
@@ -399,21 +421,44 @@ function ReportApp({ session }) {
       </main>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex gap-3">
-          <button
-            onClick={handleDailyReport}
-            disabled={busyReport}
-            className="flex-1 flex items-center justify-center gap-2 rounded-md bg-accent text-white py-2.5 text-sm font-medium hover:bg-accent/90 disabled:opacity-50"
-          >
-            <FileText size={16} /> Dnevni izvještaj
-          </button>
-          <button
-            onClick={handleWeeklyReport}
-            disabled={busyReport}
-            className="flex-1 flex items-center justify-center gap-2 rounded-md bg-accent2 text-white py-2.5 text-sm font-medium hover:bg-accent2/90 disabled:opacity-50"
-          >
-            <Sheet size={16} /> Sedmični izvještaj (Excel)
-          </button>
+        <div className="max-w-3xl mx-auto px-4 py-3">
+          <div className="flex flex-wrap items-end gap-2 mb-3">
+            <label className="text-xs text-ink/60">
+              <span className="block mb-1">Od</span>
+              <input
+                type="date"
+                value={reportStartDate}
+                onChange={(e) => setReportStartDate(e.target.value)}
+                className="rounded-md border border-ink/15 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs text-ink/60">
+              <span className="block mb-1">Do</span>
+              <input
+                type="date"
+                value={reportEndDate}
+                onChange={(e) => setReportEndDate(e.target.value)}
+                className="rounded-md border border-ink/15 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <span className="text-[11px] text-ink/40">Nema brisanja — exportuje se samo odabrani period.</span>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleDailyReport}
+              disabled={busyReport}
+              className="flex-1 flex items-center justify-center gap-2 rounded-md bg-accent text-white py-2.5 text-sm font-medium hover:bg-accent/90 disabled:opacity-50"
+            >
+              <FileText size={16} /> Dnevni izvještaj
+            </button>
+            <button
+              onClick={handleWeeklyReport}
+              disabled={busyReport}
+              className="flex-1 flex items-center justify-center gap-2 rounded-md bg-accent2 text-white py-2.5 text-sm font-medium hover:bg-accent2/90 disabled:opacity-50"
+            >
+              <Sheet size={16} /> Izvještaj za raspon (Excel)
+            </button>
+          </div>
         </div>
       </div>
     </div>
