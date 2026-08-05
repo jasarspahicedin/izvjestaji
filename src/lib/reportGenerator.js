@@ -26,7 +26,7 @@ export function visitLineText(v) {
   let line = main
   if (sub) line += line ? `, ${sub}` : sub
 
-  const left = [v.ostavljeni_uzorci, v.ostavljeni_promo_artikli].filter(Boolean).join(', ')
+  const left = [v.ostavljeni_promo_artikli].filter(Boolean).join(', ')
   if (left) line += ` (${left})`
 
   if (v.komentar && v.komentar.trim()) line += ` — ${v.komentar.trim()}`
@@ -140,7 +140,7 @@ export async function generateWeeklyReport(weekLabel, fullName, dayGroups) {
         ODJEL: v.odjel_u_ustanovi || '',
         'POSJEĆENA APOTEKA': v.posjecena_apoteka || '',
         'DOKTOR/FARMACEUT': v.doktor_u_ustanovi || '',
-        'OSTAVLJENI UZORCI': v.ostavljeni_uzorci || '',
+        'OSTAVLJENI UZORCI': 'Da',
         'PROMO ARTIKLI': v.ostavljeni_promo_artikli || '',
         KOMENTAR: v.komentar || '',
       })

@@ -15,7 +15,6 @@ export const TEXT_FIELDS = [
 
 export const TEXTAREA_FIELDS = [
   { key: 'komentar', label: 'Komentar za ustanovu ili apoteku' },
-  { key: 'ostavljeni_uzorci', label: 'Ostavljeni uzorci' },
   { key: 'ostavljeni_promo_artikli', label: 'Ostavljeni promo artikli' },
 ]
 
