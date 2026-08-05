@@ -2,6 +2,82 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+}
+
 * {
   box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(255, 205, 220, 0.58) 0, rgba(255, 205, 220, 0.2) 24%, transparent 42%),
+    radial-gradient(circle at bottom right, rgba(247, 168, 196, 0.28) 0, rgba(247, 168, 196, 0.12) 30%, transparent 58%),
+    linear-gradient(135deg, #fffafc 0%, #fff2f7 42%, #fdeff5 100%);
+  color: #1e2a38;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::before {
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,0.95) 0 1px, transparent 2px),
+    radial-gradient(circle, rgba(244, 143, 177, 0.26) 0 1px, transparent 2px),
+    radial-gradient(circle, rgba(255, 192, 203, 0.22) 0 1px, transparent 2px),
+    radial-gradient(circle, rgba(255, 182, 193, 0.16) 0 1px, transparent 2px);
+  background-size: 18px 18px, 28px 28px, 36px 36px, 44px 44px;
+  background-position: 0 0, 10px 10px, 5px 18px, 20px 6px;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+}
+
+body::after {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(255, 182, 193, 0.52) 0 8px, transparent 9px),
+    radial-gradient(circle at 80% 30%, rgba(243, 129, 173, 0.38) 0 7px, transparent 8px),
+    radial-gradient(circle at 70% 75%, rgba(255, 193, 204, 0.46) 0 9px, transparent 10px),
+    radial-gradient(circle at 15% 80%, rgba(241, 140, 173, 0.3) 0 6px, transparent 7px),
+    radial-gradient(circle at 45% 10%, rgba(255, 182, 193, 0.26) 0 7px, transparent 8px),
+    radial-gradient(circle at 60% 55%, rgba(243, 129, 173, 0.22) 0 6px, transparent 7px),
+    radial-gradient(circle at 90% 80%, rgba(255, 204, 221, 0.28) 0 6px, transparent 7px);
+  background-repeat: no-repeat;
+  opacity: 0.98;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 640px) {
+  body {
+    background:
+      radial-gradient(circle at 12% 10%, rgba(255, 184, 202, 0.42) 0, rgba(255, 184, 202, 0.16) 24%, transparent 40%),
+      radial-gradient(circle at 90% 15%, rgba(244, 143, 177, 0.28) 0, rgba(244, 143, 177, 0.1) 26%, transparent 46%),
+      radial-gradient(circle at 20% 90%, rgba(255, 214, 224, 0.35) 0, rgba(255, 214, 224, 0.14) 24%, transparent 42%),
+      linear-gradient(135deg, #fffdfd 0%, #fff6fa 45%, #fef3f7 100%);
+  }
+
+  body::after {
+    background-image:
+      radial-gradient(circle at 18% 16%, rgba(255, 182, 193, 0.46) 0 10px, transparent 11px),
+      radial-gradient(circle at 82% 24%, rgba(243, 129, 173, 0.36) 0 9px, transparent 10px),
+      radial-gradient(circle at 70% 76%, rgba(255, 193, 204, 0.42) 0 11px, transparent 12px),
+      radial-gradient(circle at 15% 84%, rgba(241, 140, 173, 0.28) 0 7px, transparent 8px),
+      radial-gradient(circle at 50% 8%, rgba(255, 182, 193, 0.3) 0 8px, transparent 9px),
+      radial-gradient(circle at 58% 58%, rgba(243, 129, 173, 0.24) 0 7px, transparent 8px),
+      radial-gradient(circle at 90% 82%, rgba(255, 204, 221, 0.32) 0 7px, transparent 8px);
+    opacity: 1;
+  }
 }
