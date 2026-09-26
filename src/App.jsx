@@ -59,28 +59,9 @@ function ReportApp({ session }) {
   const [suggestions, setSuggestions] = useState({})
   const [busyReport, setBusyReport] = useState(false)
   const [showMappings, setShowMappings] = useState(false)
-  const [doctorMappings, setDoctorMappings] = useState(() => {
-    try {
-      const local = JSON.parse(localStorage.getItem('doctorMappings') || '{}')
-      if (Object.keys(local || {}).length) return local
-      const cloud = session?.user?.user_metadata?.mappings?.doctorMappings
-      if (cloud) return cloud
-      return {}
-    } catch (e) {
-      return {}
-    }
-  })
-  const [apotekaMappings, setApotekaMappings] = useState(() => {
-    try {
-      const local = JSON.parse(localStorage.getItem('apotekaMappings') || '{}')
-      if (Object.keys(local || {}).length) return local
-      const cloud = session?.user?.user_metadata?.mappings?.apotekaMappings
-      if (cloud) return cloud
-      return {}
-    } catch (e) {
-      return {}
-    }
-  })
+  // start with empty mappings; we'll load them from DB on mount
+  const [doctorMappings, setDoctorMappings] = useState({})
+  const [apotekaMappings, setApotekaMappings] = useState({})
   const [dailyNote, setDailyNote] = useState('')
   const [reportStartDate, setReportStartDate] = useState(() => getWeekDates(todayYMD())[0])
   const [reportEndDate, setReportEndDate] = useState(() => getWeekDates(todayYMD())[6])
@@ -156,17 +137,7 @@ function ReportApp({ session }) {
     loadDay()
   }, [date, userId])
 
-  // Persist mappings to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('doctorMappings', JSON.stringify(doctorMappings || {}))
-    } catch (e) {}
-  }, [doctorMappings])
-  useEffect(() => {
-    try {
-      localStorage.setItem('apotekaMappings', JSON.stringify(apotekaMappings || {}))
-    } catch (e) {}
-  }, [apotekaMappings])
+  // mappings are persisted server-side in `mappings` table; no localStorage usage
 
   // Auto-save mappings into user metadata (debounced)
   useEffect(() => {
@@ -205,7 +176,7 @@ function ReportApp({ session }) {
 
   // Load mappings from DB on startup/session change
   useEffect(() => {
-    async function loadFromDb() {
+        async function loadFromDb() {
       try {
         const { data } = await supabase.from('mappings').select('*').eq('user_id', userId)
         if (!data) return
@@ -215,16 +186,8 @@ function ReportApp({ session }) {
           if (row.type === 'doctor') docs[row.key] = { mjesto: row.mjesto || '', posjecena_ustanova: row.posjecena_ustanova || '', odjel_u_ustanovi: row.odjel_u_ustanovi || '' }
           if (row.type === 'apoteka') apos[row.key] = { mjesto: row.mjesto || '' }
         }
-        // prefer localStorage if there are local entries, else use DB
-        try {
-          const localDoc = JSON.parse(localStorage.getItem('doctorMappings') || '{}')
-          const localApo = JSON.parse(localStorage.getItem('apotekaMappings') || '{}')
-          if (Object.keys(localDoc || {}).length === 0) setDoctorMappings(docs)
-          if (Object.keys(localApo || {}).length === 0) setApotekaMappings(apos)
-        } catch (e) {
-          setDoctorMappings(docs)
-          setApotekaMappings(apos)
-        }
+        setDoctorMappings(docs)
+        setApotekaMappings(apos)
       } catch (err) {
         console.error('Failed loading mappings from DB', err)
       }
@@ -254,15 +217,10 @@ function ReportApp({ session }) {
   const current = visits[index]
 
   function mergedSuggestions(key) {
-    const base = suggestions[key] || []
-    const set = new Set(base)
-    if (key === 'doktor_u_ustanovi') {
-      for (const k of Object.keys(doctorMappings || {})) set.add(k)
-    }
-    if (key === 'posjecena_apoteka') {
-      for (const k of Object.keys(apotekaMappings || {})) set.add(k)
-    }
-    return Array.from(set)
+    // For doctor and apoteka only use mappings (server-backed), not historical visits
+    if (key === 'doktor_u_ustanovi') return Object.keys(doctorMappings || {})
+    if (key === 'posjecena_apoteka') return Object.keys(apotekaMappings || {})
+    return suggestions[key] || []
   }
 
   function updateField(key, value) {

@@ -152,7 +152,14 @@ export default function Mappings({ doctorMappings, setDoctorMappings, apotekaMap
           <input placeholder="Mjesto" value={apoMjesto} onChange={(e) => setApoMjesto(e.target.value)} className="px-3 py-2 border rounded-md" />
         </div>
         <div className="flex gap-2 mb-4">
-          <button onClick={addApoteka} className="px-3 py-2 bg-accent text-white rounded-md">Dodaj</button>
+          {apoEditing ? (
+            <>
+              <button onClick={() => saveEditApoteka(apoEditing)} className="px-3 py-2 bg-accent text-white rounded-md">Sačuvaj</button>
+              <button onClick={() => { setApoEditing(null); setApoName(''); setApoMjesto('') }} className="px-3 py-2 border rounded-md">Otkaži</button>
+            </>
+          ) : (
+            <button onClick={addApoteka} className="px-3 py-2 bg-accent text-white rounded-md">Dodaj</button>
+          )}
         </div>
 
         <div className="mt-4 space-y-2">
