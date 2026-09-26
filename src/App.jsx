@@ -399,8 +399,10 @@ function ReportApp({ session }) {
   async function handleDailyReport() {
     setBusyReport(true)
     try {
-      const nonEmpty = visits.filter(hasContent)
-      const file = await createDailyReportFile(date, nonEmpty.length ? nonEmpty : visits, fullName, dailyNote)
+      // Merge any visible unsaved inputs for the currently open visit so UI values appear in the report
+      const mergedVisits = visits.map((v, i) => (i === index && Object.keys(visibleCurrent || {}).length ? { ...v, ...visibleCurrent } : v))
+      const nonEmpty = mergedVisits.filter(hasContent)
+      const file = await createDailyReportFile(date, nonEmpty.length ? nonEmpty : mergedVisits, fullName, dailyNote)
       await saveAs(file, file.name)
     } finally {
       setBusyReport(false)
@@ -410,8 +412,9 @@ function ReportApp({ session }) {
   async function handleSendReport() {
     setBusyReport(true)
     try {
-      const nonEmpty = visits.filter(hasContent)
-      const file = await createDailyReportFile(date, nonEmpty.length ? nonEmpty : visits, fullName, dailyNote)
+      const mergedVisits = visits.map((v, i) => (i === index && Object.keys(visibleCurrent || {}).length ? { ...v, ...visibleCurrent } : v))
+      const nonEmpty = mergedVisits.filter(hasContent)
+      const file = await createDailyReportFile(date, nonEmpty.length ? nonEmpty : mergedVisits, fullName, dailyNote)
       const apiKey = import.meta.env.VITE_RESEND_API_KEY
       const to = import.meta.env.VITE_RESEND_TO
       const from = import.meta.env.VITE_RESEND_FROM || 'noreply@example.com'
