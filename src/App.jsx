@@ -215,6 +215,12 @@ function ReportApp({ session }) {
   }
 
   const current = visits[index]
+  const [visibleCurrent, setVisibleCurrent] = useState({})
+
+  // Clear visible inputs when switching visits so fields start empty
+  useEffect(() => {
+    setVisibleCurrent({})
+  }, [index])
 
   function mergedSuggestions(key) {
     // For doctor and apoteka only use mappings (server-backed), not historical visits
@@ -224,6 +230,8 @@ function ReportApp({ session }) {
   }
 
   function updateField(key, value) {
+    // keep UI value in sync
+    setVisibleCurrent((prev) => ({ ...(prev || {}), [key]: value }))
     setVisits((prev) => {
       const next = [...prev]
       next[index] = { ...next[index], [key]: value }
@@ -232,6 +240,37 @@ function ReportApp({ session }) {
     setSaveStatus('saving')
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => saveCurrent(key, value), 500)
+  }
+
+  function handleInputChange(key, value) {
+    // update the field and persist
+    updateField(key, value)
+    // If doctor selected and mapping exists, auto-fill connected fields
+    if (key === 'doktor_u_ustanovi') {
+      const map = doctorMappings[value]
+      if (map) {
+        if (map.mjesto) updateField('mjesto', map.mjesto)
+        if (map.posjecena_ustanova) updateField('posjecena_ustanova', map.posjecena_ustanova)
+        if (map.odjel_u_ustanovi) updateField('odjel_u_ustanovi', map.odjel_u_ustanovi)
+        // clear apoteka when doctor chosen
+        updateField('posjecena_apoteka', '')
+      }
+    }
+    // If apoteka selected, auto-fill mjesto and clear doctor fields
+    if (key === 'posjecena_apoteka') {
+      const map = apotekaMappings[value]
+      if (map) {
+        if (map.mjesto) updateField('mjesto', map.mjesto)
+        updateField('posjecena_ustanova', '')
+        updateField('odjel_u_ustanovi', '')
+        updateField('doktor_u_ustanovi', '')
+      }
+    }
+  }
+
+  function clearField(key) {
+    setVisibleCurrent((prev) => ({ ...(prev || {}), [key]: '' }))
+    updateField(key, '')
   }
 
   async function saveMappingFromFormForDoctor() {
@@ -543,30 +582,48 @@ function ReportApp({ session }) {
                     <div key={f.key} className="relative">
                       <AutocompleteInput
                         label={f.label}
-                        value={current[f.key]}
-                        onChange={(val) => updateField(f.key, val)}
+                        value={visibleCurrent[f.key] ?? ''}
+                        onChange={(val) => handleInputChange(f.key, val)}
                         suggestions={mergedSuggestions(f.key)}
                       />
                       {f.key === 'doktor_u_ustanovi' && (
-                        <button
-                          onClick={saveMappingFromFormForDoctor}
-                          className="absolute right-0 top-6 text-xs px-2 py-1 rounded-md border bg-white"
-                        >
-                          Sačuvaj
-                        </button>
+                        <div className="absolute right-0 top-6 flex items-center gap-1">
+                          <button
+                            onClick={saveMappingFromFormForDoctor}
+                            className="text-xs px-2 py-1 rounded-md border bg-white"
+                          >
+                            Sačuvaj
+                          </button>
+                          <button
+                            onClick={() => clearField('doktor_u_ustanovi')}
+                            title="Očisti polje"
+                            className="text-xs px-2 py-1 rounded-md border bg-white"
+                          >
+                            x
+                          </button>
+                        </div>
                       )}
                       {f.key === 'posjecena_apoteka' && (
-                        <button
-                          onClick={saveMappingFromFormForApoteka}
-                          className="absolute right-0 top-6 text-xs px-2 py-1 rounded-md border bg-white"
-                        >
-                          Sačuvaj
-                        </button>
+                        <div className="absolute right-0 top-6 flex items-center gap-1">
+                          <button
+                            onClick={saveMappingFromFormForApoteka}
+                            className="text-xs px-2 py-1 rounded-md border bg-white"
+                          >
+                            Sačuvaj
+                          </button>
+                          <button
+                            onClick={() => clearField('posjecena_apoteka')}
+                            title="Očisti polje"
+                            className="text-xs px-2 py-1 rounded-md border bg-white"
+                          >
+                            x
+                          </button>
+                        </div>
                       )}
-                      {f.key === 'mjesto' && current.mjesto && (
+                      {f.key === 'mjesto' && (visibleCurrent.mjesto || current.mjesto) && (
                         <p className="text-[11px] text-ink/40 mt-1">
-                          {guessKanton(current.mjesto)
-                            ? `Prepoznato: ${guessKanton(current.mjesto)}`
+                          {guessKanton(visibleCurrent.mjesto || current.mjesto)
+                            ? `Prepoznato: ${guessKanton(visibleCurrent.mjesto || current.mjesto)}`
                             : 'Kanton/regija nije prepoznat(a) — biće prazno u izvještaju'}
                         </p>
                       )}
@@ -578,7 +635,7 @@ function ReportApp({ session }) {
                     <div key={f.key}>
                       <VoiceTextarea
                         label={f.label}
-                        value={current[f.key] || ''}
+                        value={visibleCurrent[f.key] ?? ''}
                         onChange={(val) => updateField(f.key, val)}
                         rows={2}
                       />

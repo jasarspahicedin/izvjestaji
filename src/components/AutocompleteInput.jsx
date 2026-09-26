@@ -9,7 +9,7 @@ export default function AutocompleteInput({ label, value, onChange, suggestions 
 
   const filtered = useMemo(() => {
     const q = (value || '').trim().toLowerCase()
-    if (!q) return suggestions.slice(0, 6)
+    if (!q) return []
     return suggestions.filter((s) => s.toLowerCase().includes(q)).slice(0, 6)
   }, [value, suggestions])
 
