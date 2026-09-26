@@ -6,6 +6,7 @@ import Mappings from './components/Mappings'
 import { TEXT_FIELDS, TEXTAREA_FIELDS, emptyVisit } from './lib/fields'
 import { todayYMD, formatDisplay, getWeekDates, parseYMD, toYMD } from './lib/dateUtils'
 import { generateDailyReport, generateWeeklyReport } from './lib/reportGenerator'
+import { sendFileWithResend } from './lib/resendClient'
 import { guessKanton } from './lib/kantoni'
 import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, Sheet, Loader2, Pencil } from 'lucide-react'
 import VoiceTextarea from './components/VoiceTextarea'
@@ -398,7 +399,30 @@ function ReportApp({ session }) {
     setBusyReport(true)
     try {
       const nonEmpty = visits.filter(hasContent)
-      await generateDailyReport(date, nonEmpty.length ? nonEmpty : visits, fullName, dailyNote)
+      const file = await createDailyReportFile(date, nonEmpty.length ? nonEmpty : visits, fullName, dailyNote)
+      await saveAs(file, file.name)
+    } finally {
+      setBusyReport(false)
+    }
+  }
+
+  async function handleSendReport() {
+    setBusyReport(true)
+    try {
+      const nonEmpty = visits.filter(hasContent)
+      const file = await createDailyReportFile(date, nonEmpty.length ? nonEmpty : visits, fullName, dailyNote)
+      const apiKey = import.meta.env.VITE_RESEND_API_KEY
+      const to = import.meta.env.VITE_RESEND_TO
+      const from = import.meta.env.VITE_RESEND_FROM || 'noreply@example.com'
+      if (!apiKey || !to) {
+        alert('Resend API key or recipient not configured (VITE_RESEND_API_KEY, VITE_RESEND_TO)')
+        return
+      }
+      await sendFileWithResend({ apiKey, from, to, subject: `Dnevni izvještaj ${date}`, html: `<p>Dnevni izvještaj za ${date}</p>`, file })
+      alert('Izvještaj poslan')
+    } catch (e) {
+      console.error(e)
+      alert('Greška pri slanju izvještaja: ' + (e.message || e))
     } finally {
       setBusyReport(false)
     }
@@ -696,6 +720,13 @@ function ReportApp({ session }) {
               className="flex-1 flex items-center justify-center gap-2 rounded-md bg-accent2 text-white py-2.5 text-sm font-medium hover:bg-accent2/90 disabled:opacity-50"
             >
               <Sheet size={16} /> Izvještaj za raspon (Excel)
+            </button>
+            <button
+              onClick={handleSendReport}
+              disabled={busyReport}
+              className="flex-1 flex items-center justify-center gap-2 rounded-md bg-green-600 text-white py-2.5 text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              <FileText size={16} /> Pošalji izvještaj
             </button>
           </div>
         </div>

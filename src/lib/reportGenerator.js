@@ -19,12 +19,21 @@ const ACCENT = '2F6F62'
  * Prazna polja se jednostavno preskaču.
  */
 export function visitLineText(v) {
-  const main = [v.posjecena_ustanova, v.posjecena_apoteka].filter(Boolean).join(' / ')
-  // Namjerno BEZ odjela ovdje - dnevni izvjestaj prikazuje samo ustanovu/apoteku i doktora.
-  const sub = v.doktor_u_ustanovi || ''
+  // Prefer doctor's first name if present, then other data (ustanova/apoteka, odjel)
+  function extractFirstName(name) {
+    if (!name) return ''
+    const cleaned = name.replace(/\bdr\.?\b/i, '').trim()
+    const parts = cleaned.split(/\s+/).filter(Boolean)
+    return parts[0] || cleaned
+  }
 
-  let line = main
-  if (sub) line += line ? `, ${sub}` : sub
+  const docFirst = extractFirstName(v.doktor_u_ustanovi)
+  const place = v.posjecena_ustanova || v.posjecena_apoteka || ''
+  const odjel = v.odjel_u_ustanovi || ''
+
+  let line = docFirst || place
+  const extras = [place, odjel].filter((x) => x && x !== docFirst)
+  if (extras.length) line += docFirst ? `, ${extras.join(', ')}` : ` ${extras.join(', ')}`
 
   const left = [v.ostavljeni_promo_artikli].filter(Boolean).join(', ')
   if (left) line += ` (${left})`
@@ -139,7 +148,7 @@ export async function generateWeeklyReport(weekLabel, fullName, dayGroups) {
         'POSJEĆENA USTANOVA': v.posjecena_ustanova || '',
         ODJEL: v.odjel_u_ustanovi || '',
         'POSJEĆENA APOTEKA': v.posjecena_apoteka || '',
-        'DOKTOR/FARMACEUT': v.doktor_u_ustanovi || '',
+        'DOKTOR/FARMACEUT': (function getFirst(name) { if (!name) return ''; const cleaned = name.replace(/\bdr\.?\b/i, '').trim(); return cleaned.split(/\s+/)[0] || cleaned })(v.doktor_u_ustanovi) || '',
         'OSTAVLJENI UZORCI': 'Da',
         'PROMO ARTIKLI': v.ostavljeni_promo_artikli || '',
         KOMENTAR: v.komentar || '',
