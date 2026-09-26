@@ -266,52 +266,6 @@ function ReportApp({ session }) {
   }
 
   function updateField(key, value) {
-    const trimmed = (value || '').trim()
-
-    // If user types a new doctor on the main form, auto-add to mappings and clear other fields
-    if (key === 'doktor_u_ustanovi' && trimmed) {
-      if (!Object.prototype.hasOwnProperty.call(doctorMappings, trimmed)) {
-        setDoctorMappings((prev) => ({ ...(prev || {}), [trimmed]: { mjesto: '', posjecena_ustanova: '', odjel_u_ustanovi: '' } }))
-        // clear other text fields and textareas for a fresh entry
-        for (const f of TEXT_FIELDS) {
-          if (f.key === 'doktor_u_ustanovi') continue
-          // update visit field locally
-          setVisits((prev) => {
-            const next = [...prev]
-            next[index] = { ...next[index], [f.key]: '' }
-            return next
-          })
-          // persist cleared field
-          saveCurrent(f.key, '')
-        }
-        for (const tf of TEXTAREA_FIELDS) {
-          setVisits((prev) => {
-            const next = [...prev]
-            next[index] = { ...next[index], [tf.key]: '' }
-            return next
-          })
-          saveCurrent(tf.key, '')
-        }
-      }
-    }
-
-    // If user types a new apoteka on the main form, auto-add and clear other fields (doktor/ustanova/odjel)
-    if (key === 'posjecena_apoteka' && trimmed) {
-      if (!Object.prototype.hasOwnProperty.call(apotekaMappings, trimmed)) {
-        setApotekaMappings((prev) => ({ ...(prev || {}), [trimmed]: { mjesto: '' } }))
-        // clear doctor and ustanova/odjel
-        const clearKeys = ['doktor_u_ustanovi', 'posjecena_ustanova', 'odjel_u_ustanovi']
-        for (const ck of clearKeys) {
-          setVisits((prev) => {
-            const next = [...prev]
-            next[index] = { ...next[index], [ck]: '' }
-            return next
-          })
-          saveCurrent(ck, '')
-        }
-      }
-    }
-
     setVisits((prev) => {
       const next = [...prev]
       next[index] = { ...next[index], [key]: value }
@@ -320,6 +274,34 @@ function ReportApp({ session }) {
     setSaveStatus('saving')
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => saveCurrent(key, value), 500)
+  }
+
+  async function saveMappingFromFormForDoctor() {
+    if (!current) return
+    const name = (current.doktor_u_ustanovi || '').trim()
+    if (!name) return
+    if (doctorMappings[name]) return
+    const map = { mjesto: current.mjesto || '', posjecena_ustanova: current.posjecena_ustanova || '', odjel_u_ustanovi: current.odjel_u_ustanovi || '' }
+    setDoctorMappings((prev) => ({ ...(prev || {}), [name]: map }))
+    try {
+      await supabase.from('mappings').upsert({ user_id: userId, type: 'doctor', key: name, mjesto: map.mjesto || null, posjecena_ustanova: map.posjecena_ustanova || null, odjel_u_ustanovi: map.odjel_u_ustanovi || null }, { onConflict: 'user_id,type,key' })
+    } catch (e) {
+      console.error('Failed saving doctor mapping', e)
+    }
+  }
+
+  async function saveMappingFromFormForApoteka() {
+    if (!current) return
+    const name = (current.posjecena_apoteka || '').trim()
+    if (!name) return
+    if (apotekaMappings[name]) return
+    const map = { mjesto: current.mjesto || '' }
+    setApotekaMappings((prev) => ({ ...(prev || {}), [name]: map }))
+    try {
+      await supabase.from('mappings').upsert({ user_id: userId, type: 'apoteka', key: name, mjesto: map.mjesto || null }, { onConflict: 'user_id,type,key' })
+    } catch (e) {
+      console.error('Failed saving apoteka mapping', e)
+    }
   }
 
   // Auto-fill when doctor or apoteka entered
@@ -600,13 +582,29 @@ function ReportApp({ session }) {
               <div ref={formRef} className="bg-white rounded-lg border border-ink/10 p-5 space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {TEXT_FIELDS.map((f) => (
-                    <div key={f.key}>
+                    <div key={f.key} className="relative">
                       <AutocompleteInput
                         label={f.label}
                         value={current[f.key]}
                         onChange={(val) => updateField(f.key, val)}
                         suggestions={mergedSuggestions(f.key)}
                       />
+                      {f.key === 'doktor_u_ustanovi' && (
+                        <button
+                          onClick={saveMappingFromFormForDoctor}
+                          className="absolute right-0 top-6 text-xs px-2 py-1 rounded-md border bg-white"
+                        >
+                          Sačuvaj
+                        </button>
+                      )}
+                      {f.key === 'posjecena_apoteka' && (
+                        <button
+                          onClick={saveMappingFromFormForApoteka}
+                          className="absolute right-0 top-6 text-xs px-2 py-1 rounded-md border bg-white"
+                        >
+                          Sačuvaj
+                        </button>
+                      )}
                       {f.key === 'mjesto' && current.mjesto && (
                         <p className="text-[11px] text-ink/40 mt-1">
                           {guessKanton(current.mjesto)
