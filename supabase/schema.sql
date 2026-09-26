@@ -63,3 +63,42 @@ create policy "delete own visits" on public.visits
 -- najlakse je dodati kolonu "role" u profil korisnika i novu select policy
 -- koja dozvoljava citanje redova drugih usera kad je role = 'manager'.
 -- Javi se pa to dodamo kad zatreba.
+
+-- Mappings table: per-user mappings for doctors and apoteke
+create table if not exists public.mappings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  type text not null, -- 'doctor' or 'apoteka'
+  key text not null,
+  mjesto text,
+  posjecena_ustanova text,
+  odjel_u_ustanovi text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists mappings_user_type_key_idx on public.mappings (user_id, type, key);
+
+drop trigger if exists trg_mappings_updated_at on public.mappings;
+create trigger trg_mappings_updated_at
+  before update on public.mappings
+  for each row execute function public.set_updated_at();
+
+alter table public.mappings enable row level security;
+
+drop policy if exists "select own mappings" on public.mappings;
+create policy "select own mappings" on public.mappings
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "insert own mappings" on public.mappings;
+create policy "insert own mappings" on public.mappings
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "update own mappings" on public.mappings;
+create policy "update own mappings" on public.mappings
+  for update using (auth.uid() = user_id);
+
+drop policy if exists "delete own mappings" on public.mappings;
+create policy "delete own mappings" on public.mappings
+  for delete using (auth.uid() = user_id);
+

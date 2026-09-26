@@ -61,18 +61,22 @@ function ReportApp({ session }) {
   const [showMappings, setShowMappings] = useState(false)
   const [doctorMappings, setDoctorMappings] = useState(() => {
     try {
+      const local = JSON.parse(localStorage.getItem('doctorMappings') || '{}')
+      if (Object.keys(local || {}).length) return local
       const cloud = session?.user?.user_metadata?.mappings?.doctorMappings
       if (cloud) return cloud
-      return JSON.parse(localStorage.getItem('doctorMappings') || '{}')
+      return {}
     } catch (e) {
       return {}
     }
   })
   const [apotekaMappings, setApotekaMappings] = useState(() => {
     try {
+      const local = JSON.parse(localStorage.getItem('apotekaMappings') || '{}')
+      if (Object.keys(local || {}).length) return local
       const cloud = session?.user?.user_metadata?.mappings?.apotekaMappings
       if (cloud) return cloud
-      return JSON.parse(localStorage.getItem('apotekaMappings') || '{}')
+      return {}
     } catch (e) {
       return {}
     }
@@ -164,52 +168,86 @@ function ReportApp({ session }) {
     } catch (e) {}
   }, [apotekaMappings])
 
-  async function saveMappingsToCloud() {
-    try {
-      const payload = { mappings: { doctorMappings: doctorMappings || {}, apotekaMappings: apotekaMappings || {} } }
-      const { error } = await supabase.auth.updateUser({ data: payload })
-      if (error) throw error
-      alert('Mappings saved to cloud (user metadata).')
-    } catch (e) {
-      console.error(e)
-      alert('Greška pri čuvanju u oblaku. Pogledajte konzolu.')
-    }
-  }
-
-  // Auto-save mappings to database (visits table) by inserting a small record in "mappings" table is not present,
-  // so instead persist them into user metadata (already done) and also save each new mapping as a dummy visit
-  // with visit_order=0 and user-provided fields so they appear in autocomplete queries server-side.
-  // Debounce saves to avoid too many writes.
-  const mappingSaveTimer = useRef(null)
+  // Auto-save mappings into user metadata (debounced)
   useEffect(() => {
-    clearTimeout(mappingSaveTimer.current)
-    mappingSaveTimer.current = setTimeout(async () => {
+    const t = setTimeout(async () => {
       try {
-        // For each doctor mapping, upsert a visit-like row marked by visit_order=0 and komentar containing "__mapping_doctor__"
-        for (const [name, map] of Object.entries(doctorMappings || {})) {
-          await supabase.from('visits').upsert({ user_id: userId, visit_date: date, visit_order: 0, doktor_u_ustanovi: name, mjesto: map.mjesto || null, posjecena_ustanova: map.posjecena_ustanova || null, odjel_u_ustanovi: map.odjel_u_ustanovi || null, komentar: '__mapping_doctor__' }, { onConflict: 'user_id,visit_date,visit_order,doktor_u_ustanovi' })
+        // Save mappings to Supabase `mappings` table per-user
+        // Upsert doctors
+        for (const [k, v] of Object.entries(doctorMappings || {})) {
+          await supabase.from('mappings').upsert({ user_id: userId, type: 'doctor', key: k, mjesto: v.mjesto || null, posjecena_ustanova: v.posjecena_ustanova || null, odjel_u_ustanovi: v.odjel_u_ustanovi || null }, { onConflict: 'user_id,type,key' })
         }
-        for (const [name, map] of Object.entries(apotekaMappings || {})) {
-          await supabase.from('visits').upsert({ user_id: userId, visit_date: date, visit_order: 0, posjecena_apoteka: name, mjesto: map.mjesto || null, komentar: '__mapping_apoteka__' }, { onConflict: 'user_id,visit_date,visit_order,posjecena_apoteka' })
+        // Remove deleted doctors (server-side cleanup)
+        const { data: existingDoctors } = await supabase.from('mappings').select('key').eq('user_id', userId).eq('type', 'doctor')
+        for (const row of existingDoctors || []) {
+          if (!doctorMappings[row.key]) {
+            await supabase.from('mappings').delete().eq('user_id', userId).eq('type', 'doctor').eq('key', row.key)
+          }
+        }
+
+        // Upsert apoteke
+        for (const [k, v] of Object.entries(apotekaMappings || {})) {
+          await supabase.from('mappings').upsert({ user_id: userId, type: 'apoteka', key: k, mjesto: v.mjesto || null }, { onConflict: 'user_id,type,key' })
+        }
+        const { data: existingApot } = await supabase.from('mappings').select('key').eq('user_id', userId).eq('type', 'apoteka')
+        for (const row of existingApot || []) {
+          if (!apotekaMappings[row.key]) {
+            await supabase.from('mappings').delete().eq('user_id', userId).eq('type', 'apoteka').eq('key', row.key)
+          }
         }
       } catch (err) {
-        console.error('Failed saving mappings as visits', err)
+        console.error('Failed saving mappings to user metadata', err)
       }
-    }, 800)
+    }, 900)
+    return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doctorMappings, apotekaMappings])
 
+  // Load mappings from DB on startup/session change
+  useEffect(() => {
+    async function loadFromDb() {
+      try {
+        const { data } = await supabase.from('mappings').select('*').eq('user_id', userId)
+        if (!data) return
+        const docs = {}
+        const apos = {}
+        for (const row of data) {
+          if (row.type === 'doctor') docs[row.key] = { mjesto: row.mjesto || '', posjecena_ustanova: row.posjecena_ustanova || '', odjel_u_ustanovi: row.odjel_u_ustanovi || '' }
+          if (row.type === 'apoteka') apos[row.key] = { mjesto: row.mjesto || '' }
+        }
+        // prefer localStorage if there are local entries, else use DB
+        try {
+          const localDoc = JSON.parse(localStorage.getItem('doctorMappings') || '{}')
+          const localApo = JSON.parse(localStorage.getItem('apotekaMappings') || '{}')
+          if (Object.keys(localDoc || {}).length === 0) setDoctorMappings(docs)
+          if (Object.keys(localApo || {}).length === 0) setApotekaMappings(apos)
+        } catch (e) {
+          setDoctorMappings(docs)
+          setApotekaMappings(apos)
+        }
+      } catch (err) {
+        console.error('Failed loading mappings from DB', err)
+      }
+    }
+    loadFromDb()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
   async function loadMappingsFromCloud() {
+    // deprecated: mappings are now stored in `mappings` table; keep helper for compatibility
     try {
-      const { data, error } = await supabase.auth.getUser()
-      if (error) throw error
-      const cloud = data?.user?.user_metadata?.mappings || {}
-      setDoctorMappings(cloud.doctorMappings || {})
-      setApotekaMappings(cloud.apotekaMappings || {})
-      alert('Mappings učitani iz oblaka.')
+      const { data } = await supabase.from('mappings').select('*').eq('user_id', userId)
+      if (!data) return
+      const docs = {}
+      const apos = {}
+      for (const row of data) {
+        if (row.type === 'doctor') docs[row.key] = { mjesto: row.mjesto || '', posjecena_ustanova: row.posjecena_ustanova || '', odjel_u_ustanovi: row.odjel_u_ustanovi || '' }
+        if (row.type === 'apoteka') apos[row.key] = { mjesto: row.mjesto || '' }
+      }
+      setDoctorMappings(docs)
+      setApotekaMappings(apos)
     } catch (e) {
-      console.error(e)
-      alert('Greška pri učitavanju iz oblaka. Pogledajte konzolu.')
+      console.error('Greška pri učitavanju mappings iz DB', e)
     }
   }
 
@@ -437,8 +475,6 @@ function ReportApp({ session }) {
               Izvjestaji
             </button>
             <button onClick={() => setShowMappings((s) => !s)} className="text-sm text-ink/40 hover:text-ink">Povezivanja</button>
-            <button onClick={saveMappingsToCloud} className="text-sm text-ink/40 hover:text-ink">Sačuvaj u oblak</button>
-            <button onClick={loadMappingsFromCloud} className="text-sm text-ink/40 hover:text-ink">Učitaj iz oblaka</button>
             <button onClick={() => supabase.auth.signOut()} className="text-xs text-ink/40 hover:text-ink">
               Odjava
             </button>
