@@ -82,6 +82,7 @@ function ReportApp({ session }) {
   const [reportEndDate, setReportEndDate] = useState(() => getWeekDates(todayYMD())[6])
   const saveTimer = useRef(null)
   const noteTimer = useRef(null)
+  const reportRef = useRef(null)
 
   // Ucitaj poznate vrijednosti za autocomplete (jednom, po polju)
   useEffect(() => {
@@ -190,6 +191,18 @@ function ReportApp({ session }) {
 
   const current = visits[index]
 
+  function mergedSuggestions(key) {
+    const base = suggestions[key] || []
+    const set = new Set(base)
+    if (key === 'doktor_u_ustanovi') {
+      for (const k of Object.keys(doctorMappings || {})) set.add(k)
+    }
+    if (key === 'posjecena_apoteka') {
+      for (const k of Object.keys(apotekaMappings || {})) set.add(k)
+    }
+    return Array.from(set)
+  }
+
   function updateField(key, value) {
     setVisits((prev) => {
       const next = [...prev]
@@ -210,11 +223,17 @@ function ReportApp({ session }) {
       if (map.mjesto && map.mjesto !== current.mjesto) updateField('mjesto', map.mjesto)
       if (map.posjecena_ustanova && map.posjecena_ustanova !== current.posjecena_ustanova) updateField('posjecena_ustanova', map.posjecena_ustanova)
       if (map.odjel_u_ustanovi && map.odjel_u_ustanovi !== current.odjel_u_ustanovi) updateField('odjel_u_ustanovi', map.odjel_u_ustanovi)
+      // Doctor implies not an apoteka — clear apoteka
+      if (current.posjecena_apoteka) updateField('posjecena_apoteka', '')
     }
     const apoVal = (current.posjecena_apoteka || '').trim()
     if (apoVal && apotekaMappings[apoVal]) {
       const map = apotekaMappings[apoVal]
+      // Apoteka only provides mjesto — clear doctor-related and ustanova/odjel
       if (map.mjesto && map.mjesto !== current.mjesto) updateField('mjesto', map.mjesto)
+      if (current.posjecena_ustanova) updateField('posjecena_ustanova', '')
+      if (current.odjel_u_ustanovi) updateField('odjel_u_ustanovi', '')
+      if (current.doktor_u_ustanovi) updateField('doktor_u_ustanovi', '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.doktor_u_ustanovi, current?.posjecena_apoteka])
@@ -379,6 +398,7 @@ function ReportApp({ session }) {
               onChange={(e) => setDate(e.target.value)}
               className="rounded-md border border-ink/15 px-2 py-1.5 text-sm"
             />
+            <button onClick={() => reportRef.current?.scrollIntoView({ behavior: 'smooth' })} className="text-sm text-ink/40 hover:text-ink">Izvjestaji</button>
             <button onClick={() => setShowMappings((s) => !s)} className="text-sm text-ink/40 hover:text-ink">Povezivanja</button>
             <button onClick={saveMappingsToCloud} className="text-sm text-ink/40 hover:text-ink">Sačuvaj u oblak</button>
             <button onClick={loadMappingsFromCloud} className="text-sm text-ink/40 hover:text-ink">Učitaj iz oblaka</button>
@@ -466,7 +486,7 @@ function ReportApp({ session }) {
                         label={f.label}
                         value={current[f.key]}
                         onChange={(val) => updateField(f.key, val)}
-                        suggestions={suggestions[f.key] || []}
+                        suggestions={mergedSuggestions(f.key)}
                       />
                       {f.key === 'mjesto' && current.mjesto && (
                         <p className="text-[11px] text-ink/40 mt-1">
@@ -507,7 +527,7 @@ function ReportApp({ session }) {
         )}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10">
+      <div ref={reportRef} className="fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10">
         <div className="max-w-3xl mx-auto px-4 py-3">
           <div className="flex flex-wrap items-end gap-2 mb-3">
             <label className="text-xs text-ink/60">
