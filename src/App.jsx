@@ -266,6 +266,52 @@ function ReportApp({ session }) {
   }
 
   function updateField(key, value) {
+    const trimmed = (value || '').trim()
+
+    // If user types a new doctor on the main form, auto-add to mappings and clear other fields
+    if (key === 'doktor_u_ustanovi' && trimmed) {
+      if (!Object.prototype.hasOwnProperty.call(doctorMappings, trimmed)) {
+        setDoctorMappings((prev) => ({ ...(prev || {}), [trimmed]: { mjesto: '', posjecena_ustanova: '', odjel_u_ustanovi: '' } }))
+        // clear other text fields and textareas for a fresh entry
+        for (const f of TEXT_FIELDS) {
+          if (f.key === 'doktor_u_ustanovi') continue
+          // update visit field locally
+          setVisits((prev) => {
+            const next = [...prev]
+            next[index] = { ...next[index], [f.key]: '' }
+            return next
+          })
+          // persist cleared field
+          saveCurrent(f.key, '')
+        }
+        for (const tf of TEXTAREA_FIELDS) {
+          setVisits((prev) => {
+            const next = [...prev]
+            next[index] = { ...next[index], [tf.key]: '' }
+            return next
+          })
+          saveCurrent(tf.key, '')
+        }
+      }
+    }
+
+    // If user types a new apoteka on the main form, auto-add and clear other fields (doktor/ustanova/odjel)
+    if (key === 'posjecena_apoteka' && trimmed) {
+      if (!Object.prototype.hasOwnProperty.call(apotekaMappings, trimmed)) {
+        setApotekaMappings((prev) => ({ ...(prev || {}), [trimmed]: { mjesto: '' } }))
+        // clear doctor and ustanova/odjel
+        const clearKeys = ['doktor_u_ustanovi', 'posjecena_ustanova', 'odjel_u_ustanovi']
+        for (const ck of clearKeys) {
+          setVisits((prev) => {
+            const next = [...prev]
+            next[index] = { ...next[index], [ck]: '' }
+            return next
+          })
+          saveCurrent(ck, '')
+        }
+      }
+    }
+
     setVisits((prev) => {
       const next = [...prev]
       next[index] = { ...next[index], [key]: value }
