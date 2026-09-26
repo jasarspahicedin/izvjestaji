@@ -398,8 +398,7 @@ function ReportApp({ session }) {
             setApotekaMappings={setApotekaMappings}
             onDone={() => setShowMappings(false)}
           />
-        ) : (
-        {loading ? (
+        ) : loading ? (
           <div className="flex justify-center py-16 text-ink/40">
             <Loader2 className="animate-spin" size={20} />
           </div>
