@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Login from './components/Login'
 import AutocompleteInput from './components/AutocompleteInput'
+import Mappings from './components/Mappings'
 import { TEXT_FIELDS, TEXTAREA_FIELDS, emptyVisit } from './lib/fields'
 import { todayYMD, formatDisplay, getWeekDates, parseYMD, toYMD } from './lib/dateUtils'
 import { generateDailyReport, generateWeeklyReport } from './lib/reportGenerator'
@@ -57,6 +58,25 @@ function ReportApp({ session }) {
   const [saveStatus, setSaveStatus] = useState('') // '', 'saving', 'saved'
   const [suggestions, setSuggestions] = useState({})
   const [busyReport, setBusyReport] = useState(false)
+  const [showMappings, setShowMappings] = useState(false)
+  const [doctorMappings, setDoctorMappings] = useState(() => {
+    try {
+      const cloud = session?.user?.user_metadata?.mappings?.doctorMappings
+      if (cloud) return cloud
+      return JSON.parse(localStorage.getItem('doctorMappings') || '{}')
+    } catch (e) {
+      return {}
+    }
+  })
+  const [apotekaMappings, setApotekaMappings] = useState(() => {
+    try {
+      const cloud = session?.user?.user_metadata?.mappings?.apotekaMappings
+      if (cloud) return cloud
+      return JSON.parse(localStorage.getItem('apotekaMappings') || '{}')
+    } catch (e) {
+      return {}
+    }
+  })
   const [dailyNote, setDailyNote] = useState('')
   const [reportStartDate, setReportStartDate] = useState(() => getWeekDates(todayYMD())[0])
   const [reportEndDate, setReportEndDate] = useState(() => getWeekDates(todayYMD())[6])
@@ -130,6 +150,44 @@ function ReportApp({ session }) {
     loadDay()
   }, [date, userId])
 
+  // Persist mappings to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('doctorMappings', JSON.stringify(doctorMappings || {}))
+    } catch (e) {}
+  }, [doctorMappings])
+  useEffect(() => {
+    try {
+      localStorage.setItem('apotekaMappings', JSON.stringify(apotekaMappings || {}))
+    } catch (e) {}
+  }, [apotekaMappings])
+
+  async function saveMappingsToCloud() {
+    try {
+      const payload = { mappings: { doctorMappings: doctorMappings || {}, apotekaMappings: apotekaMappings || {} } }
+      const { error } = await supabase.auth.updateUser({ data: payload })
+      if (error) throw error
+      alert('Mappings saved to cloud (user metadata).')
+    } catch (e) {
+      console.error(e)
+      alert('Greška pri čuvanju u oblaku. Pogledajte konzolu.')
+    }
+  }
+
+  async function loadMappingsFromCloud() {
+    try {
+      const { data, error } = await supabase.auth.getUser()
+      if (error) throw error
+      const cloud = data?.user?.user_metadata?.mappings || {}
+      setDoctorMappings(cloud.doctorMappings || {})
+      setApotekaMappings(cloud.apotekaMappings || {})
+      alert('Mappings učitani iz oblaka.')
+    } catch (e) {
+      console.error(e)
+      alert('Greška pri učitavanju iz oblaka. Pogledajte konzolu.')
+    }
+  }
+
   const current = visits[index]
 
   function updateField(key, value) {
@@ -142,6 +200,24 @@ function ReportApp({ session }) {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => saveCurrent(key, value), 500)
   }
+
+  // Auto-fill when doctor or apoteka entered
+  useEffect(() => {
+    if (!current) return
+    const docVal = (current.doktor_u_ustanovi || '').trim()
+    if (docVal && doctorMappings[docVal]) {
+      const map = doctorMappings[docVal]
+      if (map.mjesto && map.mjesto !== current.mjesto) updateField('mjesto', map.mjesto)
+      if (map.posjecena_ustanova && map.posjecena_ustanova !== current.posjecena_ustanova) updateField('posjecena_ustanova', map.posjecena_ustanova)
+      if (map.odjel_u_ustanovi && map.odjel_u_ustanovi !== current.odjel_u_ustanovi) updateField('odjel_u_ustanovi', map.odjel_u_ustanovi)
+    }
+    const apoVal = (current.posjecena_apoteka || '').trim()
+    if (apoVal && apotekaMappings[apoVal]) {
+      const map = apotekaMappings[apoVal]
+      if (map.mjesto && map.mjesto !== current.mjesto) updateField('mjesto', map.mjesto)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.doktor_u_ustanovi, current?.posjecena_apoteka])
 
   async function saveCurrent(key, value) {
     if (!current) return
@@ -303,6 +379,9 @@ function ReportApp({ session }) {
               onChange={(e) => setDate(e.target.value)}
               className="rounded-md border border-ink/15 px-2 py-1.5 text-sm"
             />
+            <button onClick={() => setShowMappings((s) => !s)} className="text-sm text-ink/40 hover:text-ink">Povezivanja</button>
+            <button onClick={saveMappingsToCloud} className="text-sm text-ink/40 hover:text-ink">Sačuvaj u oblak</button>
+            <button onClick={loadMappingsFromCloud} className="text-sm text-ink/40 hover:text-ink">Učitaj iz oblaka</button>
             <button onClick={() => supabase.auth.signOut()} className="text-xs text-ink/40 hover:text-ink">
               Odjava
             </button>
@@ -311,6 +390,15 @@ function ReportApp({ session }) {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6">
+        {showMappings ? (
+          <Mappings
+            doctorMappings={doctorMappings}
+            setDoctorMappings={setDoctorMappings}
+            apotekaMappings={apotekaMappings}
+            setApotekaMappings={setApotekaMappings}
+            onDone={() => setShowMappings(false)}
+          />
+        ) : (
         {loading ? (
           <div className="flex justify-center py-16 text-ink/40">
             <Loader2 className="animate-spin" size={20} />
