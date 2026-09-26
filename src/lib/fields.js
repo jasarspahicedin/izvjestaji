@@ -6,11 +6,11 @@
 // vidi src/App.jsx (dailyNote state) i tabelu daily_notes.
 
 export const TEXT_FIELDS = [
+  { key: 'doktor_u_ustanovi', label: 'Doktor u ustanovi', autocomplete: true },
+  { key: 'posjecena_apoteka', label: 'Posjećena apoteka', autocomplete: true },
   { key: 'mjesto', label: 'Mjesto', autocomplete: true },
   { key: 'posjecena_ustanova', label: 'Posjećena ustanova', autocomplete: true },
   { key: 'odjel_u_ustanovi', label: 'Odjel u ustanovi', autocomplete: true },
-  { key: 'doktor_u_ustanovi', label: 'Doktor u ustanovi', autocomplete: true },
-  { key: 'posjecena_apoteka', label: 'Posjećena apoteka', autocomplete: true },
 ]
 
 export const TEXTAREA_FIELDS = [

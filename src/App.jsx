@@ -83,6 +83,7 @@ function ReportApp({ session }) {
   const saveTimer = useRef(null)
   const noteTimer = useRef(null)
   const reportRef = useRef(null)
+  const formRef = useRef(null)
 
   // Ucitaj poznate vrijednosti za autocomplete (jednom, po polju)
   useEffect(() => {
@@ -174,6 +175,29 @@ function ReportApp({ session }) {
       alert('Greška pri čuvanju u oblaku. Pogledajte konzolu.')
     }
   }
+
+  // Auto-save mappings to database (visits table) by inserting a small record in "mappings" table is not present,
+  // so instead persist them into user metadata (already done) and also save each new mapping as a dummy visit
+  // with visit_order=0 and user-provided fields so they appear in autocomplete queries server-side.
+  // Debounce saves to avoid too many writes.
+  const mappingSaveTimer = useRef(null)
+  useEffect(() => {
+    clearTimeout(mappingSaveTimer.current)
+    mappingSaveTimer.current = setTimeout(async () => {
+      try {
+        // For each doctor mapping, upsert a visit-like row marked by visit_order=0 and komentar containing "__mapping_doctor__"
+        for (const [name, map] of Object.entries(doctorMappings || {})) {
+          await supabase.from('visits').upsert({ user_id: userId, visit_date: date, visit_order: 0, doktor_u_ustanovi: name, mjesto: map.mjesto || null, posjecena_ustanova: map.posjecena_ustanova || null, odjel_u_ustanovi: map.odjel_u_ustanovi || null, komentar: '__mapping_doctor__' }, { onConflict: 'user_id,visit_date,visit_order,doktor_u_ustanovi' })
+        }
+        for (const [name, map] of Object.entries(apotekaMappings || {})) {
+          await supabase.from('visits').upsert({ user_id: userId, visit_date: date, visit_order: 0, posjecena_apoteka: name, mjesto: map.mjesto || null, komentar: '__mapping_apoteka__' }, { onConflict: 'user_id,visit_date,visit_order,posjecena_apoteka' })
+        }
+      } catch (err) {
+        console.error('Failed saving mappings as visits', err)
+      }
+    }, 800)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doctorMappings, apotekaMappings])
 
   async function loadMappingsFromCloud() {
     try {
@@ -398,7 +422,20 @@ function ReportApp({ session }) {
               onChange={(e) => setDate(e.target.value)}
               className="rounded-md border border-ink/15 px-2 py-1.5 text-sm"
             />
-            <button onClick={() => reportRef.current?.scrollIntoView({ behavior: 'smooth' })} className="text-sm text-ink/40 hover:text-ink">Izvjestaji</button>
+            <button
+              onClick={() => {
+                // close mappings if open and scroll to the visit form inputs
+                setShowMappings(false)
+                setTimeout(() => {
+                  try {
+                    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  } catch (e) {}
+                }, 80)
+              }}
+              className="text-sm text-ink/40 hover:text-ink"
+            >
+              Izvjestaji
+            </button>
             <button onClick={() => setShowMappings((s) => !s)} className="text-sm text-ink/40 hover:text-ink">Povezivanja</button>
             <button onClick={saveMappingsToCloud} className="text-sm text-ink/40 hover:text-ink">Sačuvaj u oblak</button>
             <button onClick={loadMappingsFromCloud} className="text-sm text-ink/40 hover:text-ink">Učitaj iz oblaka</button>
@@ -478,7 +515,7 @@ function ReportApp({ session }) {
             </div>
 
             {current && (
-              <div className="bg-white rounded-lg border border-ink/10 p-5 space-y-5">
+              <div ref={formRef} className="bg-white rounded-lg border border-ink/10 p-5 space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {TEXT_FIELDS.map((f) => (
                     <div key={f.key}>
