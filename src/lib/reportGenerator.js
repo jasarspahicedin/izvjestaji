@@ -19,21 +19,15 @@ const ACCENT = '2F6F62'
  * Prazna polja se jednostavno preskaču.
  */
 export function visitLineText(v) {
-  // Prefer doctor's first name if present, then other data (ustanova/apoteka, odjel)
-  function extractFirstName(name) {
-    if (!name) return ''
-    const cleaned = name.replace(/\bdr\.?\b/i, '').trim()
-    const parts = cleaned.split(/\s+/).filter(Boolean)
-    return parts[0] || cleaned
-  }
-
-  const docFirst = extractFirstName(v.doktor_u_ustanovi)
+  // Use the full doctor string as stored (from Supabase). Show place/odjel after.
+  const docFull = v.doktor_u_ustanovi || ''
   const place = v.posjecena_ustanova || v.posjecena_apoteka || ''
   const odjel = v.odjel_u_ustanovi || ''
 
-  let line = docFirst || place
-  const extras = [place, odjel].filter((x) => x && x !== docFirst)
-  if (extras.length) line += docFirst ? `, ${extras.join(', ')}` : ` ${extras.join(', ')}`
+  let line = place
+  if (docFull) line += line ? `, ${docFull}` : docFull
+  const extras = [odjel].filter(Boolean)
+  if (extras.length) line += `, ${extras.join(', ')}`
 
   const left = [v.ostavljeni_promo_artikli].filter(Boolean).join(', ')
   if (left) line += ` (${left})`
