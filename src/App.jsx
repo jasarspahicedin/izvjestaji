@@ -582,7 +582,7 @@ function ReportApp({ session }) {
                     <div key={f.key} className="relative">
                       <AutocompleteInput
                         label={f.label}
-                        value={visibleCurrent[f.key] ?? ''}
+                        value={visibleCurrent[f.key] ?? current[f.key] ?? ''}
                         onChange={(val) => handleInputChange(f.key, val)}
                         suggestions={mergedSuggestions(f.key)}
                       />
@@ -635,7 +635,7 @@ function ReportApp({ session }) {
                     <div key={f.key}>
                       <VoiceTextarea
                         label={f.label}
-                        value={visibleCurrent[f.key] ?? ''}
+                        value={visibleCurrent[f.key] ?? current[f.key] ?? ''}
                         onChange={(val) => updateField(f.key, val)}
                         rows={2}
                       />
