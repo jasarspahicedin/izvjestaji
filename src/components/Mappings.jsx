@@ -1,7 +1,14 @@
 import { useState } from 'react'
 
 function MappingRow({ keyName, data, onDelete, onEdit }) {
-  const display = [data.mjesto, data.odjel_u_ustanovi, data.posjecena_ustanova].filter(Boolean).join(', ')
+  const display = [
+    data.mjesto,
+    data.posjecena_ustanova,
+    data.odjel_u_ustanovi,
+    data.komentar,
+    data.ostavljeni_uzorci,
+    data.ostavljeni_promo_artikli,
+  ].filter(Boolean).join(', ')
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 border p-2 rounded-md">
       <div className="flex-1">
@@ -26,20 +33,63 @@ export default function Mappings({ doctorMappings, setDoctorMappings, apotekaMap
   const [docMjesto, setDocMjesto] = useState('')
   const [docUstanova, setDocUstanova] = useState('')
   const [docOdjel, setDocOdjel] = useState('')
+  const [docKomentar, setDocKomentar] = useState('')
+  const [docUzorci, setDocUzorci] = useState('')
+  const [docPromo, setDocPromo] = useState('')
   const [editing, setEditing] = useState(null)
 
   const [apoName, setApoName] = useState('')
   const [apoMjesto, setApoMjesto] = useState('')
+  const [apoKomentar, setApoKomentar] = useState('')
+  const [apoUzorci, setApoUzorci] = useState('')
+  const [apoPromo, setApoPromo] = useState('')
   const [apoEditing, setApoEditing] = useState(null)
 
-  function addDoctor() {
-    if (!docName.trim()) return
-    const next = { ...doctorMappings, [docName.trim()]: { mjesto: docMjesto.trim(), posjecena_ustanova: docUstanova.trim(), odjel_u_ustanovi: docOdjel.trim() } }
-    setDoctorMappings(next)
+  function doctorValues() {
+    return {
+      mjesto: docMjesto.trim(),
+      posjecena_ustanova: docUstanova.trim(),
+      odjel_u_ustanovi: docOdjel.trim(),
+      komentar: docKomentar.trim(),
+      ostavljeni_uzorci: docUzorci.trim(),
+      ostavljeni_promo_artikli: docPromo.trim(),
+    }
+  }
+
+  function apotekaValues() {
+    return {
+      mjesto: apoMjesto.trim(),
+      posjecena_ustanova: '',
+      odjel_u_ustanovi: '',
+      komentar: apoKomentar.trim(),
+      ostavljeni_uzorci: apoUzorci.trim(),
+      ostavljeni_promo_artikli: apoPromo.trim(),
+    }
+  }
+
+  function clearDoctorForm() {
     setDocName('')
     setDocMjesto('')
     setDocUstanova('')
     setDocOdjel('')
+    setDocKomentar('')
+    setDocUzorci('')
+    setDocPromo('')
+  }
+
+  function clearApotekaForm() {
+    setApoName('')
+    setApoMjesto('')
+    setApoKomentar('')
+    setApoUzorci('')
+    setApoPromo('')
+  }
+
+  function addDoctor() {
+    if (!docName.trim()) return
+    const next = { ...doctorMappings, [docName.trim()]: doctorValues() }
+    setDoctorMappings(next)
+    clearDoctorForm()
   }
 
   function editDoctor(name) {
@@ -50,21 +100,22 @@ export default function Mappings({ doctorMappings, setDoctorMappings, apotekaMap
     setDocMjesto(v.mjesto || '')
     setDocUstanova(v.posjecena_ustanova || '')
     setDocOdjel(v.odjel_u_ustanovi || '')
+    setDocKomentar(v.komentar || '')
+    setDocUzorci(v.ostavljeni_uzorci || '')
+    setDocPromo(v.ostavljeni_promo_artikli || '')
   }
 
   function saveEditDoctor() {
     if (!editing) return
-    const next = { ...doctorMappings, [docName.trim()]: { mjesto: docMjesto.trim(), posjecena_ustanova: docUstanova.trim(), odjel_u_ustanovi: docOdjel.trim() } }
+    if (!docName.trim()) return
+    const next = { ...doctorMappings, [docName.trim()]: doctorValues() }
     // If name changed, remove old key
     if (editing !== docName.trim()) {
       delete next[editing]
     }
     setDoctorMappings(next)
     setEditing(null)
-    setDocName('')
-    setDocMjesto('')
-    setDocUstanova('')
-    setDocOdjel('')
+    clearDoctorForm()
   }
 
   function deleteDoctor(name) {
@@ -80,10 +131,9 @@ export default function Mappings({ doctorMappings, setDoctorMappings, apotekaMap
       setApoEditing(null)
       return
     }
-    const next = { ...apotekaMappings, [apoName.trim()]: { mjesto: apoMjesto.trim() } }
+    const next = { ...apotekaMappings, [apoName.trim()]: apotekaValues() }
     setApotekaMappings(next)
-    setApoName('')
-    setApoMjesto('')
+    clearApotekaForm()
   }
 
   function editApoteka(name) {
@@ -92,14 +142,17 @@ export default function Mappings({ doctorMappings, setDoctorMappings, apotekaMap
     setApoEditing(name)
     setApoName(name)
     setApoMjesto(v.mjesto || '')
+    setApoKomentar(v.komentar || '')
+    setApoUzorci(v.ostavljeni_uzorci || '')
+    setApoPromo(v.ostavljeni_promo_artikli || '')
   }
 
   function saveEditApoteka(oldName) {
-    const next = { ...apotekaMappings, [apoName.trim()]: { mjesto: apoMjesto.trim() } }
+    if (!apoName.trim()) return
+    const next = { ...apotekaMappings, [apoName.trim()]: apotekaValues() }
     if (oldName && oldName !== apoName.trim()) delete next[oldName]
     setApotekaMappings(next)
-    setApoName('')
-    setApoMjesto('')
+    clearApotekaForm()
     setApoEditing(null)
   }
 
@@ -119,18 +172,21 @@ export default function Mappings({ doctorMappings, setDoctorMappings, apotekaMap
       </div>
 
       <section className="bg-white rounded-lg border p-4 mb-4">
-        <h3 className="font-mono text-xs text-ink/60 mb-2">Doktori → Mjesto / Ustanova / Odjel</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-3">
+        <h3 className="font-mono text-xs text-ink/60 mb-2">Doktori → Podaci za posjetu</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
           <input placeholder="Doktor (npr. dr. X)" value={docName} onChange={(e) => setDocName(e.target.value)} className="px-3 py-2 border rounded-md" />
           <input placeholder="Mjesto" value={docMjesto} onChange={(e) => setDocMjesto(e.target.value)} className="px-3 py-2 border rounded-md" />
           <input placeholder="Posjećena ustanova" value={docUstanova} onChange={(e) => setDocUstanova(e.target.value)} className="px-3 py-2 border rounded-md" />
           <input placeholder="Odjel" value={docOdjel} onChange={(e) => setDocOdjel(e.target.value)} className="px-3 py-2 border rounded-md" />
+          <textarea placeholder="Komentar za ustanovu ili apoteku" value={docKomentar} onChange={(e) => setDocKomentar(e.target.value)} className="px-3 py-2 border rounded-md" />
+          <input placeholder="Ostavljeni uzorci" value={docUzorci} onChange={(e) => setDocUzorci(e.target.value)} className="px-3 py-2 border rounded-md" />
+          <input placeholder="Ostavljeni promo artikli" value={docPromo} onChange={(e) => setDocPromo(e.target.value)} className="px-3 py-2 border rounded-md" />
         </div>
         <div className="flex gap-2">
           {editing ? (
             <>
               <button onClick={saveEditDoctor} className="px-3 py-2 bg-accent text-white rounded-md">Spasi</button>
-              <button onClick={() => { setEditing(null); setDocName(''); setDocMjesto(''); setDocUstanova(''); setDocOdjel('') }} className="px-3 py-2 border rounded-md">Otkaži</button>
+              <button onClick={() => { setEditing(null); clearDoctorForm() }} className="px-3 py-2 border rounded-md">Otkaži</button>
             </>
           ) : (
             <button onClick={addDoctor} className="px-3 py-2 bg-accent text-white rounded-md">Dodaj</button>
@@ -146,16 +202,19 @@ export default function Mappings({ doctorMappings, setDoctorMappings, apotekaMap
       </section>
 
       <section className="bg-white rounded-lg border p-4">
-        <h3 className="font-mono text-xs text-ink/60 mb-2">Apoteke → Mjesto</h3>
+        <h3 className="font-mono text-xs text-ink/60 mb-2">Apoteke → Podaci za posjetu</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
           <input placeholder="Apoteka (npr. apote x)" value={apoName} onChange={(e) => setApoName(e.target.value)} className="px-3 py-2 border rounded-md" />
           <input placeholder="Mjesto" value={apoMjesto} onChange={(e) => setApoMjesto(e.target.value)} className="px-3 py-2 border rounded-md" />
+          <textarea placeholder="Komentar za ustanovu ili apoteku" value={apoKomentar} onChange={(e) => setApoKomentar(e.target.value)} className="px-3 py-2 border rounded-md" />
+          <input placeholder="Ostavljeni uzorci" value={apoUzorci} onChange={(e) => setApoUzorci(e.target.value)} className="px-3 py-2 border rounded-md" />
+          <input placeholder="Ostavljeni promo artikli" value={apoPromo} onChange={(e) => setApoPromo(e.target.value)} className="px-3 py-2 border rounded-md" />
         </div>
         <div className="flex gap-2 mb-4">
           {apoEditing ? (
             <>
               <button onClick={() => saveEditApoteka(apoEditing)} className="px-3 py-2 bg-accent text-white rounded-md">Sačuvaj</button>
-              <button onClick={() => { setApoEditing(null); setApoName(''); setApoMjesto('') }} className="px-3 py-2 border rounded-md">Otkaži</button>
+              <button onClick={() => { setApoEditing(null); clearApotekaForm() }} className="px-3 py-2 border rounded-md">Otkaži</button>
             </>
           ) : (
             <button onClick={addApoteka} className="px-3 py-2 bg-accent text-white rounded-md">Dodaj</button>

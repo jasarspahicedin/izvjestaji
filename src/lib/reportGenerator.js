@@ -31,7 +31,10 @@ export function visitLineText(v) {
 
   let line = parts.join(', ')
 
-  const left = [v.ostavljeni_promo_artikli].filter(Boolean).join(', ')
+  const left = [
+    v.ostavljeni_uzorci ? `Uzorci: ${v.ostavljeni_uzorci}` : '',
+    v.ostavljeni_promo_artikli ? `Promo artikli: ${v.ostavljeni_promo_artikli}` : '',
+  ].filter(Boolean).join(', ')
   if (left) line += ` (${left})`
 
   if (v.komentar && v.komentar.trim()) line += ` — ${v.komentar.trim()}`
@@ -145,7 +148,7 @@ export async function generateWeeklyReport(weekLabel, fullName, dayGroups) {
         ODJEL: v.odjel_u_ustanovi || '',
         'POSJEĆENA APOTEKA': v.posjecena_apoteka || '',
         'DOKTOR/FARMACEUT': (function getFirst(name) { if (!name) return ''; const cleaned = name.replace(/\bdr\.?\b/i, '').trim(); return cleaned.split(/\s+/)[0] || cleaned })(v.doktor_u_ustanovi) || '',
-        'OSTAVLJENI UZORCI': 'Da',
+        'OSTAVLJENI UZORCI': v.ostavljeni_uzorci || '',
         'PROMO ARTIKLI': v.ostavljeni_promo_artikli || '',
         KOMENTAR: v.komentar || '',
       })

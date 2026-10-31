@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Login from './components/Login'
-import AutocompleteInput from './components/AutocompleteInput'
+import SavedValueInput from './components/SavedValueInput'
 import Mappings from './components/Mappings'
-import { TEXT_FIELDS, TEXTAREA_FIELDS, emptyVisit } from './lib/fields'
+import { TEXT_FIELDS, TEXTAREA_FIELDS, ALL_FIELDS, MAPPING_FIELDS, emptyVisit } from './lib/fields'
 import { todayYMD, formatDisplay, getWeekDates, parseYMD, toYMD } from './lib/dateUtils'
 import { generateDailyReport, generateWeeklyReport, createDailyReportFile } from './lib/reportGenerator'
 import { saveAs } from 'file-saver'
 import { sendFileWithResend } from './lib/resendClient'
 import { guessKanton } from './lib/kantoni'
 import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, Sheet, Loader2, Pencil } from 'lucide-react'
-import VoiceTextarea from './components/VoiceTextarea'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -59,15 +58,18 @@ function ReportApp({ session }) {
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState('') // '', 'saving', 'saved'
   const [suggestions, setSuggestions] = useState({})
+  const [dailyNoteSuggestions, setDailyNoteSuggestions] = useState([])
   const [busyReport, setBusyReport] = useState(false)
   const [showMappings, setShowMappings] = useState(false)
   // start with empty mappings; we'll load them from DB on mount
   const [doctorMappings, setDoctorMappings] = useState({})
   const [apotekaMappings, setApotekaMappings] = useState({})
+  const [visitMappings, setVisitMappings] = useState({ doctors: {}, apoteke: {} })
   const [dailyNote, setDailyNote] = useState('')
   const [reportStartDate, setReportStartDate] = useState(() => getWeekDates(todayYMD())[0])
   const [reportEndDate, setReportEndDate] = useState(() => getWeekDates(todayYMD())[6])
-  const saveTimer = useRef(null)
+  const saveTimers = useRef(new Map())
+  const pendingSaves = useRef(new Map())
   const noteTimer = useRef(null)
   const reportRef = useRef(null)
   const formRef = useRef(null)
@@ -75,20 +77,45 @@ function ReportApp({ session }) {
   // Ucitaj poznate vrijednosti za autocomplete (jednom, po polju)
   useEffect(() => {
     async function loadSuggestions() {
+      const { data: visitData, error: visitsError } = await supabase
+        .from('visits')
+        .select('*')
+        .eq('user_id', userId)
+        .order('visit_date', { ascending: false })
+        .order('visit_order', { ascending: false })
+        .limit(500)
       const result = {}
-      for (const f of TEXT_FIELDS) {
-        const { data, error } = await supabase
-          .from('visits')
-          .select(f.key)
-          .eq('user_id', userId)
-          .not(f.key, 'is', null)
-          .neq(f.key, '')
-          .limit(500)
-        if (!error && data) {
-          result[f.key] = [...new Set(data.map((r) => r[f.key]).filter(Boolean))]
+      const doctors = {}
+      const apoteke = {}
+      if (visitsError) {
+        console.error('Failed loading saved visit values', visitsError)
+      } else {
+        for (const field of ALL_FIELDS) {
+          result[field.key] = [...new Set((visitData || []).map((row) => row[field.key]).filter(Boolean))]
         }
+        for (const visit of visitData || []) {
+          const doctor = (visit.doktor_u_ustanovi || '').trim()
+          const apoteka = (visit.posjecena_apoteka || '').trim()
+          const values = Object.fromEntries(MAPPING_FIELDS.map((field) => [field, visit[field] || '']))
+          if (doctor && !doctors[doctor]) doctors[doctor] = values
+          if (apoteka && !apoteke[apoteka]) apoteke[apoteka] = values
+        }
+        setVisitMappings({ doctors, apoteke })
       }
       setSuggestions(result)
+
+      const { data, error } = await supabase
+        .from('daily_notes')
+        .select('generalni_komentar')
+        .eq('user_id', userId)
+        .not('generalni_komentar', 'is', null)
+        .neq('generalni_komentar', '')
+        .limit(500)
+      if (error) {
+        console.error('Failed loading saved general comments', error)
+      } else {
+        setDailyNoteSuggestions([...new Set((data || []).map((row) => row.generalni_komentar).filter(Boolean))])
+      }
     }
     loadSuggestions()
   }, [userId])
@@ -148,7 +175,12 @@ function ReportApp({ session }) {
         // Save mappings to Supabase `mappings` table per-user
         // Upsert doctors
         for (const [k, v] of Object.entries(doctorMappings || {})) {
-          await supabase.from('mappings').upsert({ user_id: userId, type: 'doctor', key: k, mjesto: v.mjesto || null, posjecena_ustanova: v.posjecena_ustanova || null, odjel_u_ustanovi: v.odjel_u_ustanovi || null }, { onConflict: 'user_id,type,key' })
+          await supabase.from('mappings').upsert({
+            user_id: userId,
+            type: 'doctor',
+            key: k,
+            ...Object.fromEntries(MAPPING_FIELDS.map((field) => [field, v[field] || null])),
+          }, { onConflict: 'user_id,type,key' })
         }
         // Remove deleted doctors (server-side cleanup)
         const { data: existingDoctors } = await supabase.from('mappings').select('key').eq('user_id', userId).eq('type', 'doctor')
@@ -160,7 +192,12 @@ function ReportApp({ session }) {
 
         // Upsert apoteke
         for (const [k, v] of Object.entries(apotekaMappings || {})) {
-          await supabase.from('mappings').upsert({ user_id: userId, type: 'apoteka', key: k, mjesto: v.mjesto || null }, { onConflict: 'user_id,type,key' })
+          await supabase.from('mappings').upsert({
+            user_id: userId,
+            type: 'apoteka',
+            key: k,
+            ...Object.fromEntries(MAPPING_FIELDS.map((field) => [field, v[field] || null])),
+          }, { onConflict: 'user_id,type,key' })
         }
         const { data: existingApot } = await supabase.from('mappings').select('key').eq('user_id', userId).eq('type', 'apoteka')
         for (const row of existingApot || []) {
@@ -185,8 +222,9 @@ function ReportApp({ session }) {
         const docs = {}
         const apos = {}
         for (const row of data) {
-          if (row.type === 'doctor') docs[row.key] = { mjesto: row.mjesto || '', posjecena_ustanova: row.posjecena_ustanova || '', odjel_u_ustanovi: row.odjel_u_ustanovi || '' }
-          if (row.type === 'apoteka') apos[row.key] = { mjesto: row.mjesto || '' }
+          const fields = Object.fromEntries(MAPPING_FIELDS.map((field) => [field, row[field] || '']))
+          if (row.type === 'doctor') docs[row.key] = fields
+          if (row.type === 'apoteka') apos[row.key] = fields
         }
         setDoctorMappings(docs)
         setApotekaMappings(apos)
@@ -206,8 +244,9 @@ function ReportApp({ session }) {
       const docs = {}
       const apos = {}
       for (const row of data) {
-        if (row.type === 'doctor') docs[row.key] = { mjesto: row.mjesto || '', posjecena_ustanova: row.posjecena_ustanova || '', odjel_u_ustanovi: row.odjel_u_ustanovi || '' }
-        if (row.type === 'apoteka') apos[row.key] = { mjesto: row.mjesto || '' }
+        const fields = Object.fromEntries(MAPPING_FIELDS.map((field) => [field, row[field] || '']))
+        if (row.type === 'doctor') docs[row.key] = fields
+        if (row.type === 'apoteka') apos[row.key] = fields
       }
       setDoctorMappings(docs)
       setApotekaMappings(apos)
@@ -225,10 +264,12 @@ function ReportApp({ session }) {
   }, [index])
 
   function mergedSuggestions(key) {
-    // For doctor and apoteka only use mappings (server-backed), not historical visits
-    if (key === 'doktor_u_ustanovi') return Object.keys(doctorMappings || {})
-    if (key === 'posjecena_apoteka') return Object.keys(apotekaMappings || {})
-    return suggestions[key] || []
+    const mappedValues = key === 'doktor_u_ustanovi'
+      ? [...Object.keys(doctorMappings || {}), ...Object.keys(visitMappings.doctors)]
+      : key === 'posjecena_apoteka'
+        ? [...Object.keys(apotekaMappings || {}), ...Object.keys(visitMappings.apoteke)]
+        : []
+    return [...new Set([...mappedValues, ...(suggestions[key] || [])])]
   }
 
   function updateField(key, value) {
@@ -240,8 +281,16 @@ function ReportApp({ session }) {
       return next
     })
     setSaveStatus('saving')
-    clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => saveCurrent(key, value), 500)
+    if (!current) return
+    const pending = pendingSaves.current.get(current.id) || {}
+    pendingSaves.current.set(current.id, { ...pending, [key]: value })
+    clearTimeout(saveTimers.current.get(current.id))
+    saveTimers.current.set(current.id, setTimeout(() => {
+      const changes = pendingSaves.current.get(current.id)
+      pendingSaves.current.delete(current.id)
+      saveTimers.current.delete(current.id)
+      if (changes) saveCurrent(current.id, changes)
+    }, 500))
   }
 
   function handleInputChange(key, value) {
@@ -249,22 +298,24 @@ function ReportApp({ session }) {
     updateField(key, value)
     // If doctor selected and mapping exists, auto-fill connected fields
     if (key === 'doktor_u_ustanovi') {
-      const map = doctorMappings[value]
+      const map = doctorMappings[value] || visitMappings.doctors[value]
       if (map) {
-        if (map.mjesto) updateField('mjesto', map.mjesto)
-        if (map.posjecena_ustanova) updateField('posjecena_ustanova', map.posjecena_ustanova)
-        if (map.odjel_u_ustanovi) updateField('odjel_u_ustanovi', map.odjel_u_ustanovi)
+        for (const field of MAPPING_FIELDS) {
+          const mappedValue = map[field] || visitMappings.doctors[value]?.[field] || ''
+          if ((current?.[field] || '') !== mappedValue) updateField(field, mappedValue)
+        }
         // clear apoteka when doctor chosen
         updateField('posjecena_apoteka', '')
       }
     }
     // If apoteka selected, auto-fill mjesto and clear doctor fields
     if (key === 'posjecena_apoteka') {
-      const map = apotekaMappings[value]
+      const map = apotekaMappings[value] || visitMappings.apoteke[value]
       if (map) {
-        if (map.mjesto) updateField('mjesto', map.mjesto)
-        updateField('posjecena_ustanova', '')
-        updateField('odjel_u_ustanovi', '')
+        for (const field of MAPPING_FIELDS) {
+          const mappedValue = map[field] || visitMappings.apoteke[value]?.[field] || ''
+          if ((current?.[field] || '') !== mappedValue) updateField(field, mappedValue)
+        }
         updateField('doktor_u_ustanovi', '')
       }
     }
@@ -277,13 +328,19 @@ function ReportApp({ session }) {
 
   async function saveMappingFromFormForDoctor() {
     if (!current) return
-    const name = (current.doktor_u_ustanovi || '').trim()
+    const visit = { ...current, ...visibleCurrent }
+    const name = (visit.doktor_u_ustanovi || '').trim()
     if (!name) return
-    if (doctorMappings[name]) return
-    const map = { mjesto: current.mjesto || '', posjecena_ustanova: current.posjecena_ustanova || '', odjel_u_ustanovi: current.odjel_u_ustanovi || '' }
+    const map = Object.fromEntries(MAPPING_FIELDS.map((field) => [field, visit[field] || '']))
     setDoctorMappings((prev) => ({ ...(prev || {}), [name]: map }))
     try {
-      await supabase.from('mappings').upsert({ user_id: userId, type: 'doctor', key: name, mjesto: map.mjesto || null, posjecena_ustanova: map.posjecena_ustanova || null, odjel_u_ustanovi: map.odjel_u_ustanovi || null }, { onConflict: 'user_id,type,key' })
+      const { error } = await supabase.from('mappings').upsert({
+        user_id: userId,
+        type: 'doctor',
+        key: name,
+        ...Object.fromEntries(MAPPING_FIELDS.map((field) => [field, map[field] || null])),
+      }, { onConflict: 'user_id,type,key' })
+      if (error) console.error('Failed saving doctor mapping', error)
     } catch (e) {
       console.error('Failed saving doctor mapping', e)
     }
@@ -291,56 +348,58 @@ function ReportApp({ session }) {
 
   async function saveMappingFromFormForApoteka() {
     if (!current) return
-    const name = (current.posjecena_apoteka || '').trim()
+    const visit = { ...current, ...visibleCurrent }
+    const name = (visit.posjecena_apoteka || '').trim()
     if (!name) return
-    if (apotekaMappings[name]) return
-    const map = { mjesto: current.mjesto || '' }
+    const map = Object.fromEntries(MAPPING_FIELDS.map((field) => [field, visit[field] || '']))
     setApotekaMappings((prev) => ({ ...(prev || {}), [name]: map }))
     try {
-      await supabase.from('mappings').upsert({ user_id: userId, type: 'apoteka', key: name, mjesto: map.mjesto || null }, { onConflict: 'user_id,type,key' })
+      const { error } = await supabase.from('mappings').upsert({
+        user_id: userId,
+        type: 'apoteka',
+        key: name,
+        ...Object.fromEntries(MAPPING_FIELDS.map((field) => [field, map[field] || null])),
+      }, { onConflict: 'user_id,type,key' })
+      if (error) console.error('Failed saving apoteka mapping', error)
     } catch (e) {
       console.error('Failed saving apoteka mapping', e)
     }
   }
 
-  // Auto-fill when doctor or apoteka entered
-  useEffect(() => {
-    if (!current) return
-    const docVal = (current.doktor_u_ustanovi || '').trim()
-    if (docVal && doctorMappings[docVal]) {
-      const map = doctorMappings[docVal]
-      if (map.mjesto && map.mjesto !== current.mjesto) updateField('mjesto', map.mjesto)
-      if (map.posjecena_ustanova && map.posjecena_ustanova !== current.posjecena_ustanova) updateField('posjecena_ustanova', map.posjecena_ustanova)
-      if (map.odjel_u_ustanovi && map.odjel_u_ustanovi !== current.odjel_u_ustanovi) updateField('odjel_u_ustanovi', map.odjel_u_ustanovi)
-      // Doctor implies not an apoteka — clear apoteka
-      if (current.posjecena_apoteka) updateField('posjecena_apoteka', '')
-    }
-    const apoVal = (current.posjecena_apoteka || '').trim()
-    if (apoVal && apotekaMappings[apoVal]) {
-      const map = apotekaMappings[apoVal]
-      // Apoteka only provides mjesto — clear doctor-related and ustanova/odjel
-      if (map.mjesto && map.mjesto !== current.mjesto) updateField('mjesto', map.mjesto)
-      if (current.posjecena_ustanova) updateField('posjecena_ustanova', '')
-      if (current.odjel_u_ustanovi) updateField('odjel_u_ustanovi', '')
-      if (current.doktor_u_ustanovi) updateField('doktor_u_ustanovi', '')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.doktor_u_ustanovi, current?.posjecena_apoteka])
-
-  async function saveCurrent(key, value) {
-    if (!current) return
+  async function saveCurrent(visitId, changes) {
     const { error } = await supabase
       .from('visits')
-      .update({ [key]: value })
-      .eq('id', current.id)
+      .update(changes)
+      .eq('id', visitId)
     setSaveStatus(error ? '' : 'saved')
     if (!error) {
       setSuggestions((prev) => {
-        const list = prev[key] || []
-        if (value && !list.includes(value)) return { ...prev, [key]: [value, ...list] }
-        return prev
+        const next = { ...prev }
+        for (const [key, value] of Object.entries(changes)) {
+          const list = next[key] || []
+          if (value && !list.includes(value)) next[key] = [value, ...list]
+        }
+        return next
       })
+      const savedVisit = { ...current, ...changes }
+      const doctor = (savedVisit.doktor_u_ustanovi || '').trim()
+      const apoteka = (savedVisit.posjecena_apoteka || '').trim()
+      const mappingValues = Object.fromEntries(MAPPING_FIELDS.map((field) => [field, savedVisit[field] || '']))
+      if (doctor) {
+        setVisitMappings((prev) => ({
+          ...prev,
+          doctors: { ...prev.doctors, [doctor]: mappingValues },
+        }))
+      }
+      if (apoteka) {
+        setVisitMappings((prev) => ({
+          ...prev,
+          apoteke: { ...prev.apoteke, [apoteka]: mappingValues },
+        }))
+      }
       setTimeout(() => setSaveStatus(''), 1500)
+    } else {
+      console.error('Failed saving visit fields', error)
     }
   }
 
@@ -357,6 +416,10 @@ function ReportApp({ session }) {
       .upsert({ user_id: userId, visit_date: date, generalni_komentar: value }, { onConflict: 'user_id,visit_date' })
     setSaveStatus(error ? '' : 'saved')
     if (!error) setTimeout(() => setSaveStatus(''), 1500)
+    if (error) console.error('Failed saving general comment', error)
+    else if (value && !dailyNoteSuggestions.includes(value)) {
+      setDailyNoteSuggestions((prev) => [value, ...prev])
+    }
   }
 
   async function goPrev() {
@@ -608,7 +671,7 @@ function ReportApp({ session }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {TEXT_FIELDS.map((f) => (
                     <div key={f.key} className="relative">
-                      <AutocompleteInput
+                      <SavedValueInput
                         label={f.label}
                         value={visibleCurrent[f.key] ?? current[f.key] ?? ''}
                         onChange={(val) => handleInputChange(f.key, val)}
@@ -661,11 +724,12 @@ function ReportApp({ session }) {
                 <div className="space-y-4">
                   {TEXTAREA_FIELDS.map((f) => (
                     <div key={f.key}>
-                      <VoiceTextarea
+                      <SavedValueInput
                         label={f.label}
                         value={visibleCurrent[f.key] ?? current[f.key] ?? ''}
                         onChange={(val) => updateField(f.key, val)}
-                        rows={2}
+                        suggestions={suggestions[f.key] || []}
+                        multiline
                       />
                     </div>
                   ))}
@@ -675,11 +739,13 @@ function ReportApp({ session }) {
 
             {/* Generalni komentar - JEDAN, za citav dan, ne po posjeti */}
             <div className="bg-white rounded-lg border border-ink/10 p-5 mt-4">
-              <VoiceTextarea
+              <SavedValueInput
                 label="Generalni komentar (za cijeli dan)"
                 description="Zajednički komentar za sve posjete danas. Svaki novi red postaje posebna tačka u izvještaju."
                 value={dailyNote}
                 onChange={updateDailyNote}
+                suggestions={dailyNoteSuggestions}
+                multiline
                 rows={4}
               />
             </div>

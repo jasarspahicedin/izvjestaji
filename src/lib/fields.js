@@ -15,10 +15,19 @@ export const TEXT_FIELDS = [
 
 export const TEXTAREA_FIELDS = [
   { key: 'komentar', label: 'Komentar za ustanovu ili apoteku' },
+  { key: 'ostavljeni_uzorci', label: 'Ostavljeni uzorci' },
   { key: 'ostavljeni_promo_artikli', label: 'Ostavljeni promo artikli' },
 ]
 
 export const ALL_FIELDS = [...TEXT_FIELDS, ...TEXTAREA_FIELDS]
+export const MAPPING_FIELDS = [
+  'mjesto',
+  'posjecena_ustanova',
+  'odjel_u_ustanovi',
+  'komentar',
+  'ostavljeni_uzorci',
+  'ostavljeni_promo_artikli',
+]
 
 export function emptyVisit() {
   const v = {}
