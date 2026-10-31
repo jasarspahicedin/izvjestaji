@@ -749,12 +749,12 @@ function ReportApp({ session }) {
         <div className="max-w-3xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div aria-live="polite">
-              {saveFeedback?.visitId === current?.id && saveFeedback.status === 'error' && (
+              {saveFeedback && current && saveFeedback.visitId === current.id && saveFeedback.status === 'error' && (
                 <span role="alert" className="text-sm text-red-600">
                   Greška pri čuvanju.
                 </span>
               )}
-              {saveFeedback?.visitId === current?.id && saveFeedback.status === 'saved' && (
+              {saveFeedback && current && saveFeedback.visitId === current.id && saveFeedback.status === 'saved' && (
                 <span role="status" className="text-sm text-green-700">
                   Posjeta je sačuvana.
                 </span>
