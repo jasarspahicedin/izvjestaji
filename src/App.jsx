@@ -527,7 +527,7 @@ function ReportApp({ session }) {
   }
 
   return (
-    <div className="min-h-screen pb-24">
+    <div className="min-h-screen pb-80 sm:pb-40">
       <header className="border-b border-ink/10 bg-white sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div>
@@ -741,10 +741,17 @@ function ReportApp({ session }) {
                 rows={4}
               />
             </div>
-            <div className="mt-4 flex items-center justify-end gap-3">
+          </>
+        )}
+      </main>
+
+      <div ref={reportRef} className="fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10">
+        <div className="max-w-3xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div aria-live="polite">
               {saveFeedback?.visitId === current?.id && saveFeedback.status === 'error' && (
                 <span role="alert" className="text-sm text-red-600">
-                  Posjeta nije sačuvana. Provjerite vezu i pokušajte ponovo.
+                  Greška pri čuvanju.
                 </span>
               )}
               {saveFeedback?.visitId === current?.id && saveFeedback.status === 'saved' && (
@@ -752,21 +759,19 @@ function ReportApp({ session }) {
                   Posjeta je sačuvana.
                 </span>
               )}
-              <button
-                type="button"
-                onClick={saveCurrentVisit}
-                disabled={!current || savingVisitId === current.id || !dirtyVisitIds.has(current.id)}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {savingVisitId === current?.id ? 'Čuvanje…' : 'Sačuvaj posjetu'}
-              </button>
+              {current && dirtyVisitIds.has(current.id) && (
+                <span className="text-xs text-ink/50">Ima nesnimljenih izmjena</span>
+              )}
             </div>
-          </>
-        )}
-      </main>
-
-      <div ref={reportRef} className="fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10">
-        <div className="max-w-3xl mx-auto px-4 py-3">
+            <button
+              type="button"
+              onClick={saveCurrentVisit}
+              disabled={!current || savingVisitId === current.id || !dirtyVisitIds.has(current.id)}
+              className="shrink-0 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingVisitId === current?.id ? 'Čuvanje…' : 'Sačuvaj posjetu'}
+            </button>
+          </div>
           <div className="flex flex-wrap items-end gap-2 mb-3">
             <label className="text-xs text-ink/60">
               <span className="block mb-1">Od</span>
