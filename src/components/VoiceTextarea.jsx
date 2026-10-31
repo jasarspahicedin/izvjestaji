@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Volume2 } from 'lucide-react'
 
-export default function VoiceTextarea({ label, value, onChange, rows = 2, description, className = '', placeholder = '' }) {
+export default function VoiceTextarea({
+  label,
+  value,
+  onChange,
+  rows = 2,
+  description,
+  className = '',
+  placeholder = '',
+  onFocus,
+  onBlur,
+}) {
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [statusText, setStatusText] = useState('')
@@ -159,6 +169,8 @@ export default function VoiceTextarea({ label, value, onChange, rows = 2, descri
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        onFocus={onFocus}
+        onBlur={onBlur}
         className={`w-full rounded-md border border-ink/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent ${className}`}
       />
     </div>

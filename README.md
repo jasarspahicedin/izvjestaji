@@ -11,7 +11,8 @@ sa generisanjem dnevnih i sedmičnih izvještaja u Word (.docx) formatu.
 - Nijedno polje nije obavezno
 - Padajuće liste ranije unesenih vrijednosti za polja posjete i komentare, uz opciju "Dodaj novi zapis"
 - Izbor ranije unesenog doktora/apoteke popunjava povezane podatke iz prethodne posjete
-- "Ostavljeni uzorci" je uvijek "Da" u izvještaju; promo artikli se unose kao tekst samo za trenutni unos i ne čuvaju se
+- "Ostavljeni uzorci" je uvijek "Da" u izvještaju; promo artikli se unose u obično tekstualno polje
+- Unos posjete se čuva u bazu klikom na "Sačuvaj posjetu"; aplikacija prikazuje potvrdu ili grešku
 - Generalni komentar se koristi u izvještaju, ali se ne čuva u bazi i briše se pri promjeni datuma
 - Više posjeta po danu, sa dugmadima "Prethodna posjeta" / "Sljedeća posjeta"
 - Dugme "Dnevni izvještaj" - preuzima Word dokument sa svim posjetama tog dana
@@ -34,10 +35,12 @@ automatski vidi samo svoje podatke. To znači da dodavanje novih korisnika kasni
 2. Idi u **SQL Editor** -> New query, zalijepi sadržaj fajla `supabase/schema.sql` i pokreni (Run).
    Ovo pravi tabele za posjete i povezivanja te sigurnosna pravila (RLS). Ako baza već postoji,
    ponovo pokreni skriptu kako bi dodao nove kolone za spremljene podatke doktora i apoteka.
-3. Idi u **Authentication -> Providers** i provjeri da je Email prijava uključena (uključena je po defaultu).
+3. Za jednokratno brisanje svih ranije sačuvanih povezivanja doktora i apoteka za sve korisnike,
+   pokreni `supabase/reset_mappings.sql`. Ovo ne briše posjete i ne treba ponavljati nakon resetovanja.
+4. Idi u **Authentication -> Providers** i provjeri da je Email prijava uključena (uključena je po defaultu).
    - Ako ne želiš da korisnici moraju potvrđivati email prije prijave (korisno dok testiraš sam),
      idi u **Authentication -> Settings** i isključi "Confirm email".
-4. Idi u **Settings -> API** i kopiraj:
+5. Idi u **Settings -> API** i kopiraj:
    - `Project URL`
    - `anon public` ključ
 

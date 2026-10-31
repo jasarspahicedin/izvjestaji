@@ -57,8 +57,10 @@ function ReportApp({ session }) {
   const [visits, setVisits] = useState([])
   const [index, setIndex] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [saveStatus, setSaveStatus] = useState('') // '', 'saving', 'saved'
+  const [dirtyVisitIds, setDirtyVisitIds] = useState(() => new Set())
+  const [saveFeedback, setSaveFeedback] = useState(null)
   const [suggestions, setSuggestions] = useState({})
+  const [savingVisitId, setSavingVisitId] = useState(null)
   const [busyReport, setBusyReport] = useState(false)
   const [showMappings, setShowMappings] = useState(false)
   // start with empty mappings; we'll load them from DB on mount
@@ -68,8 +70,7 @@ function ReportApp({ session }) {
   const [dailyNote, setDailyNote] = useState('')
   const [reportStartDate, setReportStartDate] = useState(() => getWeekDates(todayYMD())[0])
   const [reportEndDate, setReportEndDate] = useState(() => getWeekDates(todayYMD())[6])
-  const saveTimers = useRef(new Map())
-  const pendingSaves = useRef(new Map())
+  const editRevisions = useRef(new Map())
   const reportRef = useRef(null)
   const formRef = useRef(null)
 
@@ -111,6 +112,8 @@ function ReportApp({ session }) {
     async function loadDay() {
       setLoading(true)
       setDailyNote('')
+      setDirtyVisitIds(new Set())
+      setSaveFeedback(null)
 
       const { data, error } = await supabase
         .from('visits')
@@ -252,29 +255,20 @@ function ReportApp({ session }) {
   }
 
   function updateField(key, value) {
-    // keep UI value in sync
     setVisibleCurrent((prev) => ({ ...(prev || {}), [key]: value }))
     setVisits((prev) => {
       const next = [...prev]
       next[index] = { ...next[index], [key]: value }
       return next
     })
-    if (key === 'ostavljeni_promo_artikli') return
-    setSaveStatus('saving')
     if (!current) return
-    const pending = pendingSaves.current.get(current.id) || {}
-    pendingSaves.current.set(current.id, { ...pending, [key]: value })
-    clearTimeout(saveTimers.current.get(current.id))
-    saveTimers.current.set(current.id, setTimeout(() => {
-      const changes = pendingSaves.current.get(current.id)
-      pendingSaves.current.delete(current.id)
-      saveTimers.current.delete(current.id)
-      if (changes) saveCurrent(current.id, changes)
-    }, 500))
+    editRevisions.current.set(current.id, (editRevisions.current.get(current.id) || 0) + 1)
+    setDirtyVisitIds((prev) => new Set(prev).add(current.id))
+    setSaveFeedback({ visitId: current.id, status: 'unsaved' })
   }
 
   function handleInputChange(key, value) {
-    // update the field and persist
+    // Keep edits local until the user saves the visit.
     updateField(key, value)
     // If doctor selected and mapping exists, auto-fill connected fields
     if (key === 'doktor_u_ustanovi') {
@@ -346,42 +340,62 @@ function ReportApp({ session }) {
     }
   }
 
-  async function saveCurrent(visitId, changes) {
+  async function saveCurrent(visitId, visit, revision) {
+    const changes = Object.fromEntries(ALL_FIELDS.map((field) => [field.key, visit[field.key] || '']))
     const { error } = await supabase
       .from('visits')
       .update(changes)
       .eq('id', visitId)
-    setSaveStatus(error ? '' : 'saved')
-    if (!error) {
-      setSuggestions((prev) => {
-        const next = { ...prev }
-        for (const [key, value] of Object.entries(changes)) {
-          if (!SAVED_VALUE_FIELDS.some((field) => field.key === key)) continue
-          const list = next[key] || []
-          if (value && !list.includes(value)) next[key] = [value, ...list]
-        }
+      .select('id')
+      .single()
+    setSavingVisitId(null)
+    if (error) {
+      console.error('Failed saving visit fields', error)
+      setSaveFeedback({ visitId, status: 'error' })
+      return
+    }
+
+    const stillCurrentRevision = editRevisions.current.get(visitId) === revision
+    if (stillCurrentRevision) {
+      setDirtyVisitIds((prev) => {
+        const next = new Set(prev)
+        next.delete(visitId)
         return next
       })
-      const savedVisit = { ...current, ...changes }
-      const doctor = (savedVisit.doktor_u_ustanovi || '').trim()
-      const apoteka = (savedVisit.posjecena_apoteka || '').trim()
-      const mappingValues = Object.fromEntries(MAPPING_FIELDS.map((field) => [field, savedVisit[field] || '']))
-      if (doctor) {
-        setVisitMappings((prev) => ({
-          ...prev,
-          doctors: { ...prev.doctors, [doctor]: mappingValues },
-        }))
-      }
-      if (apoteka) {
-        setVisitMappings((prev) => ({
-          ...prev,
-          apoteke: { ...prev.apoteke, [apoteka]: mappingValues },
-        }))
-      }
-      setTimeout(() => setSaveStatus(''), 1500)
+      setSaveFeedback({ visitId, status: 'saved' })
     } else {
-      console.error('Failed saving visit fields', error)
+      setSaveFeedback({ visitId, status: 'unsaved' })
     }
+    setSuggestions((prev) => {
+      const next = { ...prev }
+      for (const field of SAVED_VALUE_FIELDS) {
+        const value = changes[field.key]
+        const values = next[field.key] || []
+        if (value && !values.includes(value)) next[field.key] = [value, ...values]
+      }
+      return next
+    })
+    const doctor = (visit.doktor_u_ustanovi || '').trim()
+    const apoteka = (visit.posjecena_apoteka || '').trim()
+    const mappingValues = Object.fromEntries(MAPPING_FIELDS.map((field) => [field, visit[field] || '']))
+    setVisitMappings((prev) => ({
+      doctors: doctor ? { ...prev.doctors, [doctor]: mappingValues } : prev.doctors,
+      apoteke: apoteka ? { ...prev.apoteke, [apoteka]: mappingValues } : prev.apoteke,
+    }))
+    if (stillCurrentRevision) {
+      setTimeout(() => {
+        setSaveFeedback((prev) => prev?.visitId === visitId && prev.status === 'saved' ? null : prev)
+      }, 2500)
+    }
+  }
+
+  async function saveCurrentVisit() {
+    if (!current || savingVisitId) return
+    const visit = { ...current, ...visibleCurrent }
+    const revision = editRevisions.current.get(current.id) || 0
+    setSavingVisitId(current.id)
+    setSaveFeedback({ visitId: current.id, status: 'saving' })
+    await saveCurrent(current.id, visit, revision)
   }
 
   function updateDailyNote(value) {
@@ -495,16 +509,7 @@ function ReportApp({ session }) {
           .order('visit_order', { ascending: true })
         const dayVisits = d === date ? visits : data || []
         const nonEmpty = dayVisits.filter(hasContent)
-
-        const { data: note } = d === date
-          ? { data: null }
-          : await supabase
-            .from('daily_notes')
-            .select('generalni_komentar')
-            .eq('user_id', userId)
-            .eq('visit_date', d)
-            .maybeSingle()
-        const generalniKomentar = d === date ? dailyNote : note?.generalni_komentar || ''
+        const generalniKomentar = d === date ? dailyNote : ''
 
         if (nonEmpty.length || generalniKomentar) {
           groups.push({ date: d, visits: nonEmpty, generalniKomentar })
@@ -536,14 +541,19 @@ function ReportApp({ session }) {
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-ink/40 w-14 text-right">
-              {saveStatus === 'saving' && 'čuvanje…'}
-              {saveStatus === 'saved' && 'sačuvano'}
+            <span className="text-xs text-ink/40 min-w-24 text-right">
+              {current && dirtyVisitIds.has(current.id) && 'nesnimljeno'}
+              {current && saveFeedback?.visitId === current.id && saveFeedback.status === 'saving' && 'čuvanje…'}
+              {current && saveFeedback?.visitId === current.id && saveFeedback.status === 'saved' && 'sačuvano'}
+              {current && saveFeedback?.visitId === current.id && saveFeedback.status === 'error' && 'greška pri čuvanju'}
             </span>
             <input
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                if (dirtyVisitIds.size && !window.confirm('Postoje nesnimljene izmjene. Promijeniti datum i odbaciti ih?')) return
+                setDate(e.target.value)
+              }}
               className="rounded-md border border-ink/15 px-2 py-1.5 text-sm"
             />
             <button
@@ -712,6 +722,7 @@ function ReportApp({ session }) {
                         type="text"
                         value={visibleCurrent[f.key] ?? current[f.key] ?? ''}
                         onChange={(event) => updateField(f.key, event.target.value)}
+                        placeholder="Unesite promo artikle"
                         className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent"
                       />
                     </div>
@@ -729,6 +740,26 @@ function ReportApp({ session }) {
                 onChange={updateDailyNote}
                 rows={4}
               />
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-3">
+              {saveFeedback?.visitId === current?.id && saveFeedback.status === 'error' && (
+                <span role="alert" className="text-sm text-red-600">
+                  Posjeta nije sačuvana. Provjerite vezu i pokušajte ponovo.
+                </span>
+              )}
+              {saveFeedback?.visitId === current?.id && saveFeedback.status === 'saved' && (
+                <span role="status" className="text-sm text-green-700">
+                  Posjeta je sačuvana.
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={saveCurrentVisit}
+                disabled={!current || savingVisitId === current.id || !dirtyVisitIds.has(current.id)}
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingVisitId === current?.id ? 'Čuvanje…' : 'Sačuvaj posjetu'}
+              </button>
             </div>
           </>
         )}
