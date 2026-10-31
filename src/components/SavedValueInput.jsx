@@ -30,6 +30,7 @@ export default function SavedValueInput({
     }
     if (selected === ADD_NEW_VALUE) {
       setAddingNew(true)
+      onChange('')
       return
     }
 
@@ -63,12 +64,14 @@ export default function SavedValueInput({
               value={value}
               onChange={onChange}
               rows={rows}
+              placeholder="Unesite novi komentar"
             />
           ) : (
             <input
               type="text"
               value={value || ''}
               onChange={(event) => onChange(event.target.value)}
+              placeholder="Unesite novi zapis"
               className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent"
               autoComplete="off"
               autoFocus

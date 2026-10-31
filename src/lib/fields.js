@@ -3,7 +3,7 @@
 //
 // "Stručni saradnik" NIJE ovdje - uzima se iz imena/prezimena naloga (auth profil).
 // "Generalni komentar" NIJE ovdje - to je jedan zajednički komentar za cijeli dan,
-// vidi src/App.jsx (dailyNote state) i tabelu daily_notes.
+// vidi src/App.jsx (dailyNote state); unosi se samo u memoriju preglednika.
 
 export const TEXT_FIELDS = [
   { key: 'doktor_u_ustanovi', label: 'Doktor u ustanovi', autocomplete: true },
@@ -15,18 +15,19 @@ export const TEXT_FIELDS = [
 
 export const TEXTAREA_FIELDS = [
   { key: 'komentar', label: 'Komentar za ustanovu ili apoteku' },
-  { key: 'ostavljeni_uzorci', label: 'Ostavljeni uzorci' },
+]
+
+export const PLAIN_TEXT_FIELDS = [
   { key: 'ostavljeni_promo_artikli', label: 'Ostavljeni promo artikli' },
 ]
 
-export const ALL_FIELDS = [...TEXT_FIELDS, ...TEXTAREA_FIELDS]
+export const SAVED_VALUE_FIELDS = [...TEXT_FIELDS, ...TEXTAREA_FIELDS]
+export const ALL_FIELDS = [...SAVED_VALUE_FIELDS, ...PLAIN_TEXT_FIELDS]
 export const MAPPING_FIELDS = [
   'mjesto',
   'posjecena_ustanova',
   'odjel_u_ustanovi',
   'komentar',
-  'ostavljeni_uzorci',
-  'ostavljeni_promo_artikli',
 ]
 
 export function emptyVisit() {

@@ -3,13 +3,14 @@ import { supabase } from './supabaseClient'
 import Login from './components/Login'
 import SavedValueInput from './components/SavedValueInput'
 import Mappings from './components/Mappings'
-import { TEXT_FIELDS, TEXTAREA_FIELDS, ALL_FIELDS, MAPPING_FIELDS, emptyVisit } from './lib/fields'
+import { TEXT_FIELDS, TEXTAREA_FIELDS, PLAIN_TEXT_FIELDS, SAVED_VALUE_FIELDS, ALL_FIELDS, MAPPING_FIELDS, emptyVisit } from './lib/fields'
 import { todayYMD, formatDisplay, getWeekDates, parseYMD, toYMD } from './lib/dateUtils'
 import { generateDailyReport, generateWeeklyReport, createDailyReportFile } from './lib/reportGenerator'
 import { saveAs } from 'file-saver'
 import { sendFileWithResend } from './lib/resendClient'
 import { guessKanton } from './lib/kantoni'
 import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, Sheet, Loader2, Pencil } from 'lucide-react'
+import VoiceTextarea from './components/VoiceTextarea'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -58,7 +59,6 @@ function ReportApp({ session }) {
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState('') // '', 'saving', 'saved'
   const [suggestions, setSuggestions] = useState({})
-  const [dailyNoteSuggestions, setDailyNoteSuggestions] = useState([])
   const [busyReport, setBusyReport] = useState(false)
   const [showMappings, setShowMappings] = useState(false)
   // start with empty mappings; we'll load them from DB on mount
@@ -70,7 +70,6 @@ function ReportApp({ session }) {
   const [reportEndDate, setReportEndDate] = useState(() => getWeekDates(todayYMD())[6])
   const saveTimers = useRef(new Map())
   const pendingSaves = useRef(new Map())
-  const noteTimer = useRef(null)
   const reportRef = useRef(null)
   const formRef = useRef(null)
 
@@ -90,7 +89,7 @@ function ReportApp({ session }) {
       if (visitsError) {
         console.error('Failed loading saved visit values', visitsError)
       } else {
-        for (const field of ALL_FIELDS) {
+        for (const field of SAVED_VALUE_FIELDS) {
           result[field.key] = [...new Set((visitData || []).map((row) => row[field.key]).filter(Boolean))]
         }
         for (const visit of visitData || []) {
@@ -103,19 +102,6 @@ function ReportApp({ session }) {
         setVisitMappings({ doctors, apoteke })
       }
       setSuggestions(result)
-
-      const { data, error } = await supabase
-        .from('daily_notes')
-        .select('generalni_komentar')
-        .eq('user_id', userId)
-        .not('generalni_komentar', 'is', null)
-        .neq('generalni_komentar', '')
-        .limit(500)
-      if (error) {
-        console.error('Failed loading saved general comments', error)
-      } else {
-        setDailyNoteSuggestions([...new Set((data || []).map((row) => row.generalni_komentar).filter(Boolean))])
-      }
     }
     loadSuggestions()
   }, [userId])
@@ -124,6 +110,7 @@ function ReportApp({ session }) {
   useEffect(() => {
     async function loadDay() {
       setLoading(true)
+      setDailyNote('')
 
       const { data, error } = await supabase
         .from('visits')
@@ -152,14 +139,6 @@ function ReportApp({ session }) {
         setVisits(data)
         setIndex(0)
       }
-
-      const { data: note } = await supabase
-        .from('daily_notes')
-        .select('generalni_komentar')
-        .eq('user_id', userId)
-        .eq('visit_date', date)
-        .maybeSingle()
-      setDailyNote(note?.generalni_komentar || '')
 
       setLoading(false)
     }
@@ -280,6 +259,7 @@ function ReportApp({ session }) {
       next[index] = { ...next[index], [key]: value }
       return next
     })
+    if (key === 'ostavljeni_promo_artikli') return
     setSaveStatus('saving')
     if (!current) return
     const pending = pendingSaves.current.get(current.id) || {}
@@ -376,6 +356,7 @@ function ReportApp({ session }) {
       setSuggestions((prev) => {
         const next = { ...prev }
         for (const [key, value] of Object.entries(changes)) {
+          if (!SAVED_VALUE_FIELDS.some((field) => field.key === key)) continue
           const list = next[key] || []
           if (value && !list.includes(value)) next[key] = [value, ...list]
         }
@@ -405,21 +386,6 @@ function ReportApp({ session }) {
 
   function updateDailyNote(value) {
     setDailyNote(value)
-    setSaveStatus('saving')
-    clearTimeout(noteTimer.current)
-    noteTimer.current = setTimeout(() => saveDailyNote(value), 500)
-  }
-
-  async function saveDailyNote(value) {
-    const { error } = await supabase
-      .from('daily_notes')
-      .upsert({ user_id: userId, visit_date: date, generalni_komentar: value }, { onConflict: 'user_id,visit_date' })
-    setSaveStatus(error ? '' : 'saved')
-    if (!error) setTimeout(() => setSaveStatus(''), 1500)
-    if (error) console.error('Failed saving general comment', error)
-    else if (value && !dailyNoteSuggestions.includes(value)) {
-      setDailyNoteSuggestions((prev) => [value, ...prev])
-    }
   }
 
   async function goPrev() {
@@ -456,7 +422,7 @@ function ReportApp({ session }) {
   }
 
   function hasContent(v) {
-    return [...TEXT_FIELDS, ...TEXTAREA_FIELDS].some((f) => (v[f.key] || '').trim())
+    return ALL_FIELDS.some((f) => (v[f.key] || '').trim())
   }
 
   async function handleDailyReport() {
@@ -527,17 +493,21 @@ function ReportApp({ session }) {
           .eq('user_id', userId)
           .eq('visit_date', d)
           .order('visit_order', { ascending: true })
-        const nonEmpty = (data || []).filter(hasContent)
+        const dayVisits = d === date ? visits : data || []
+        const nonEmpty = dayVisits.filter(hasContent)
 
-        const { data: note } = await supabase
-          .from('daily_notes')
-          .select('generalni_komentar')
-          .eq('user_id', userId)
-          .eq('visit_date', d)
-          .maybeSingle()
+        const { data: note } = d === date
+          ? { data: null }
+          : await supabase
+            .from('daily_notes')
+            .select('generalni_komentar')
+            .eq('user_id', userId)
+            .eq('visit_date', d)
+            .maybeSingle()
+        const generalniKomentar = d === date ? dailyNote : note?.generalni_komentar || ''
 
-        if (nonEmpty.length || note?.generalni_komentar) {
-          groups.push({ date: d, visits: nonEmpty, generalniKomentar: note?.generalni_komentar || '' })
+        if (nonEmpty.length || generalniKomentar) {
+          groups.push({ date: d, visits: nonEmpty, generalniKomentar })
         }
       }
       if (groups.length === 0) {
@@ -733,19 +703,30 @@ function ReportApp({ session }) {
                       />
                     </div>
                   ))}
+                  {PLAIN_TEXT_FIELDS.map((f) => (
+                    <div key={f.key}>
+                      <label className="block text-xs font-mono uppercase tracking-wide text-ink/60 mb-1">
+                        {f.label}
+                      </label>
+                      <input
+                        type="text"
+                        value={visibleCurrent[f.key] ?? current[f.key] ?? ''}
+                        onChange={(event) => updateField(f.key, event.target.value)}
+                        className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
             {/* Generalni komentar - JEDAN, za citav dan, ne po posjeti */}
             <div className="bg-white rounded-lg border border-ink/10 p-5 mt-4">
-              <SavedValueInput
+              <VoiceTextarea
                 label="Generalni komentar (za cijeli dan)"
                 description="Zajednički komentar za sve posjete danas. Svaki novi red postaje posebna tačka u izvještaju."
                 value={dailyNote}
                 onChange={updateDailyNote}
-                suggestions={dailyNoteSuggestions}
-                multiline
                 rows={4}
               />
             </div>

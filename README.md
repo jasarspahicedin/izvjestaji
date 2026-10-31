@@ -11,6 +11,8 @@ sa generisanjem dnevnih i sedmičnih izvještaja u Word (.docx) formatu.
 - Nijedno polje nije obavezno
 - Padajuće liste ranije unesenih vrijednosti za polja posjete i komentare, uz opciju "Dodaj novi zapis"
 - Izbor ranije unesenog doktora/apoteke popunjava povezane podatke iz prethodne posjete
+- "Ostavljeni uzorci" je uvijek "Da" u izvještaju; promo artikli se unose kao tekst samo za trenutni unos i ne čuvaju se
+- Generalni komentar se koristi u izvještaju, ali se ne čuva u bazi i briše se pri promjeni datuma
 - Više posjeta po danu, sa dugmadima "Prethodna posjeta" / "Sljedeća posjeta"
 - Dugme "Dnevni izvještaj" - preuzima Word dokument sa svim posjetama tog dana
 - Dugme "Sedmični izvještaj" - preuzima Word dokument sa svim posjetama cijele sedmice (pon-ned)

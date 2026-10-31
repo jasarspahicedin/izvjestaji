@@ -74,16 +74,12 @@ create table if not exists public.mappings (
   posjecena_ustanova text,
   odjel_u_ustanovi text,
   komentar text,
-  ostavljeni_uzorci text,
-  ostavljeni_promo_artikli text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.mappings
-  add column if not exists komentar text,
-  add column if not exists ostavljeni_uzorci text,
-  add column if not exists ostavljeni_promo_artikli text;
+  add column if not exists komentar text;
 
 create unique index if not exists mappings_user_type_key_idx on public.mappings (user_id, type, key);
 
